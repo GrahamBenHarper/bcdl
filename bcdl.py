@@ -9,37 +9,18 @@ import shutil
 with open("bc.html") as fp:
     soup = BeautifulSoup(fp, "html5lib")
 
-#<a class="item-link" href="https://noproblemadigital.bandcamp.com/album/modular-thought" target="_blank">
-
-# for tag in soup.find_all('a'):
-#     getClass = tag.get('class')
-#     if isinstance(getClass, list):
-#         if (getClass[0] == 'item-link'):
-#             href = tag.get('href')
-#             if href:
-#                 print(tag.get('href'))
-
-# for tag in soup.find_all('a', class_='item-link'):
-#     href = tag.get('href')
-#     if (href):
-#         print(href)
-#     else:
-#         continue
+albumList = list()
 
 http = urllib3.PoolManager()
 
-# temp is used so we only return the first 4 matches
-# find all the spans that have the class redownload-item
-# then iterate through them, grabbing out the a href's
-# (there will only be one per), and then load each site
-# and print it. once it's printed, we need to implement
-# the regex at the bottom, which will match https://pop...&quot
-# which is most of the address, but we need to swap out
-# some of the &amps, i think, otherwise i believe that if
-# we attempt to download that 'page,' it will return a zip
-# of FLACs
-
 temp = 1
+
+def makeItReal(something):
+    # https://stackoverflow.com/questions/51885694/how-to-decode-backslash-scapes-strings-in-python
+    toReturn = something.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
+    #print(f'{something} being returned as {toReturn}')
+    return toReturn
+
 for tag in soup.find_all('span', class_="redownload-item"):
     if (temp == 5):
         pass
