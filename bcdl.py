@@ -50,7 +50,7 @@ def fixUni(inputString):
 def buildHrefList():
     temp = 1
     for tag in soup.find_all('span', class_="redownload-item"):
-        if (temp >= 10):
+        if (temp >= 100):
             pass
         else:
             href = tag.find('a')
@@ -86,8 +86,40 @@ def addToDB(artist, album, site, dlURL, mp3_v0, mp3_320, flac, aac_hi, vorbis, a
 def printDB():
     res = cur.execute("SELECT artist FROM album")
     print(res.fetchall())
-    for row in cur.execute("SELECT artist, album, dlURL, flac FROM album ORDER BY mp3_v0"):
-        print(row)
+    dlList = list()
+    pList = list()
+    index = 1
+    dlList.append(None) # fix index
+    for artist, album, dlURL, flac in cur.execute("SELECT artist, album, dlURL, flac FROM album ORDER BY artist"):
+        dlList.append(dlURL)
+        pList.append(f"{index} - {artist} - {album} ({flac} MB)")
+        index += 1
+    for item in pList[::-1]:
+        print(item)
+
+    print("==> Albums to download (eg: 1 2 3, 1-3)")
+    userInput = input("==> ").split()
+    selList = list()
+    rangeList = list()
+    for x in userInput:
+        if (x.__contains__("-")):
+            rangeList.append(x)
+        else:
+            selList.append(dlList[int(x)])
+
+    for x in rangeList:
+        theRange = x.split("-")
+        for y in range(int(theRange[0]), int(theRange[1])):
+            selList.append(dlList[y])
+
+
+    for item in selList:
+        print(item)
+    #print(dlList[int(userInput)])
+
+    # ask user to pick one, or a range, to download. add up the size and show to user, give option to quit
+    # ok? then download p
+
 
 def visitPages():
     for site in hrefToParse:
@@ -106,17 +138,9 @@ def visitPages():
             except:
                 match = None
             if (match):
-                # downloadURL = re.sub("\&amp;", "&", match[0])
-                # downloadURL = urlStart + dlFormats[0] + match
                 soup = BeautifulSoup(data, "html5lib")
                 artist = fixUni(soup.find('div', class_='artist').get_text()[3:]) #remove 'by ' at start
                 album = fixUni(soup.find('div', class_='title').get_text())
-                # albumList.append({'index': temp, 'artist': artist, 'album': album, 'dlURL': downloadURL})
-                albumList.append({'index': len(albumList) + 1, 'artist': artist, 'album': album, 'dlURL': match})
-                #for enc in dlFormats:
-                    #albumList[len(albumList)-1][enc + 'DL'] = urlStart + enc + match
-                    # print(f'I want to do the regex re.findall({magicMBstart} + {enc} + {magicMBend}, data)')
-                #    albumList[len(albumList)-1][enc] = toMB(re.findall(magicMBstart + enc + magicMBend, data)[0])
 
                 mp3_v0 = toMB(re.findall(magicMBstart + 'mp3-v0' + magicMBend, data)[0])
                 mp3_320 = toMB(re.findall(magicMBstart + 'mp3-320' + magicMBend, data)[0])
@@ -148,26 +172,4 @@ visitPages()
 printDB()
 con.close()
 
-# for item in albumList[::-1]:
-#      artist = item['artist']
-#      album = item['album']
-#      index = item['index']
-#      dlURL = item['dlURL']
-#      dlSize = item['flacMB']
-#      print(f'#{index} - {artist} - {album} (FLAC {dlSize}MB)\n{dlURL}\n')
-
-# with open('bcdl.db', 'w') as f:
-#    for item in albumList[::-1]:
-#        f.write(json.dumps(item))
-#        artist = item['artist']
-#        album = item['album']
-#        index = item['index']
-#        dlURL = item['flacDL']
-#        dlSize = item['flacMB']
-#        print(f'#{index} - {artist} - {album} (FLAC {dlSize})\n{dlURL}\n')
-# f.close()
-
-# print(albumList)
-# print(albumList[0]['album'])
-# testing = albumList[0]['album']
 # https:\/\/popplers5.bandcamp.com/download/album\?enc=flac.+?(?=&quot) -- regex!!!!
