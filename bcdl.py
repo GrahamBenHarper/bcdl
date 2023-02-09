@@ -17,8 +17,7 @@ file.close()
 con = sqlite3.connect("bcdl.db")
 cur = con.cursor()
 
-albumList = list()
-hrefToParse = list()
+links_to_parse = list()
 
 download_formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac',
                     'wav', 'aiff-lossless']
@@ -27,11 +26,36 @@ chosen_format = 'flac'
 magicMBstart = '(?<='
 magicMBend = '&quot;:{&quot;size_mb&quot;:&quot;)(.*?)(?=&quot;)'
 
-magicGrabURL = '(?<=https:\/\/popplers5.bandcamp.com\/download\/album\?enc=flac).+?(?=&quot)'
+
+# while doing some refactoring i've realized that the grab URL has changed;
+# i need to do further testing but i believe 'popplers5.bandcamp' will need
+# to be changed to 'p4.bcbits'
+magicGrabURL = '(?<=https:\/\/popplers5.bandcamp.com' \
+               '\/download\/album\?enc=flac).+?(?=&quot)'
 urlStart = 'https://popplers5.bandcamp.com/download/album?enc='
 
 
 http = urllib3.PoolManager()
+
+
+def main():
+    # I would like to have some sort of menu that shows a list of all of the albums
+    # or maybe you could search by record label, artist, etc depending on what info
+    # is available
+
+    print("Choose encoding:")
+
+    for encoding in download_formats:
+        formatR = encoding.replace("-", "_")
+        print(formatR)
+
+    chosen_format = input("> ")
+
+    createDB()
+    buildHrefList()
+    visitPages()
+    printDB()
+    con.close()
 
 
 def createDB():
@@ -44,10 +68,13 @@ def createDB():
             runString += f", {formatR}"
         cur.execute(runString + ")")
 
-def fixUni(inputString):
+
+def fix_unicode_string(inputString):
+    '''Hacky fix for unicode characters, since problems
+    seem to arise with album and artist names that use these characters'''
     # https://stackoverflow.com/questions/51885694/how-to-decode-backslash-scapes-strings-in-python
     outputString = inputString.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
-    #print(f'{inputString} being returned as {outputString}')
+    # print(f'{inputString} being returned as {outputString}')
     return outputString
 
 def buildHrefList():
@@ -58,9 +85,10 @@ def buildHrefList():
             pass
         else:
             href = tag.find('a')
-            site = href.get('href')
-            hrefToParse.append(site)
+            link = href.get('href')
+            links_to_parse.append(link)
             temp += 1
+
 
 def siteInDB(site):
     res = cur.execute(f"SELECT site FROM album WHERE site='{site}'")
@@ -68,13 +96,16 @@ def siteInDB(site):
         return False
     return True
 
+
 def toMB(value):
-    if(value[-2] == 'M'):
+    '''Takes ie: 500M or 1.5G as input and returns ie: 500 or 1536'''
+    if (value[-2] == 'M'):
         return float(value[:-2])
-    elif(value[-2] == 'G'):
+    elif (value[-2] == 'G'):
         return float(value[:-2]) * 1024
     else:
         return -1
+
 
 def addToDB(artist, album, site, dlURL, mp3_v0, mp3_320, flac, aac_hi, vorbis, alac, wav, aiff_lossless):
     data = [artist, album, site, dlURL, mp3_v0, mp3_320, flac, aac_hi, vorbis, alac, wav, aiff_lossless]
@@ -93,7 +124,7 @@ def printDB():
     dlList = list()
     pList = list()
     index = 1
-    dlList.append(None) # fix index
+    dlList.append(None)  # fix index
     for artist, album, dlURL, download_size in cur.execute(f"SELECT artist, album, dlURL, {chosen_format} FROM album ORDER BY artist"):
         dlList.append(dlURL)
         pList.append(f"{index} - {artist} - {album} ({download_size} MB)")
@@ -127,6 +158,7 @@ def printDB():
         print(item)
     #print(dlList[int(userInput)])
 
+
 def downloadAlbum(url):
     grab_sitem_regex = '(?<=sitem_id=).*'
     sitem_list = re.findall(grab_sitem_regex, url)
@@ -149,17 +181,15 @@ def downloadAlbum(url):
         zObject.extractall(path='downloads/' + sitem)
 
 
-
-
 def visitPages():
-    for site in hrefToParse:
+    for link in links_to_parse:
         match = None
         #print(site)
-        if(not siteInDB(site)):
+        if(not siteInDB(link)):
             try:
-                r = http.request('GET', site)
+                r = http.request('GET', link)
             except:
-                print(f"problem loading {site}")
+                print(f"problem loading {link}")
             try:
                 data = str(r.data)
                 # (?<=https:\/\/popplers5.bandcamp.com\/download\/album\?enc=flac).+?(?=&quot)
@@ -169,8 +199,8 @@ def visitPages():
                 match = None
             if (match):
                 soup = BeautifulSoup(data, "html5lib")
-                artist = fixUni(soup.find('div', class_='artist').get_text()[3:]) #remove 'by ' at start
-                album = fixUni(soup.find('div', class_='title').get_text())
+                artist = fix_unicode_string(soup.find('div', class_='artist').get_text()[3:]) #remove 'by ' at start
+                album = fix_unicode_string(soup.find('div', class_='title').get_text())
 
                 mp3_v0 = toMB(re.findall(magicMBstart + 'mp3-v0' + magicMBend, data)[0])
                 mp3_320 = toMB(re.findall(magicMBstart + 'mp3-320' + magicMBend, data)[0])
@@ -180,30 +210,14 @@ def visitPages():
                 alac = toMB(re.findall(magicMBstart + 'alac' + magicMBend, data)[0])
                 wav = toMB(re.findall(magicMBstart + 'wav' + magicMBend, data)[0])
                 aiff_lossless = toMB(re.findall(magicMBstart + 'aiff-lossless' + magicMBend, data)[0])
-                addToDB(artist, album, site, match, mp3_v0, mp3_320, flac, aac_hi, vorbis, alac, wav, aiff_lossless)
+                addToDB(artist, album, link, match, mp3_v0, mp3_320, flac, aac_hi, vorbis, alac, wav, aiff_lossless)
 
                 # with http.request('GET', downloadURL, preload_content=False) as dl, open(f"{artist} - {album}.zip", 'wb') as out_file:
                 #     shutil.copyfileobj(dl, out_file)
                 #print(downloadURL)
 
 
-# I would like to have some sort of menu that shows a list of all of the albums
-# or maybe you could search by record label, artist, etc., depending on what info
-# is available
-
-print("Choose encoding:")
-
-for encoding in download_formats:
-    formatR = encoding.replace("-", "_")
-    print(formatR)
-
-chosen_format = input("> ")
-
-
-createDB()
-buildHrefList()
-visitPages()
-printDB()
-con.close()
+if __name__ == "__main__":
+    main()
 
 # https:\/\/popplers5.bandcamp.com/download/album\?enc=flac.+?(?=&quot) -- regex!!!!
