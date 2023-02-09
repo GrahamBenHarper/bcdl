@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
 from bs4 import BeautifulSoup
-import sys
+# import sys # currently unused
 import urllib3
 import re
-import shutil
+# import shutil # currently unused
 import sqlite3
+import requests
+from zipfile import ZipFile
+import os
 
-with open("bc.html") as fp:
-    soup = BeautifulSoup(fp, "html5lib")
-fp.close()
+with open("bc.html") as file:
+    soup = BeautifulSoup(file, "html5lib")
+file.close()
 
 con = sqlite3.connect("bcdl.db")
 cur = con.cursor()
@@ -17,13 +20,13 @@ cur = con.cursor()
 albumList = list()
 hrefToParse = list()
 
-dlFormats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac', 'wav', 'aiff-lossless']
+download_formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac',
+                    'wav', 'aiff-lossless']
+chosen_format = 'flac'
+
 magicMBstart = '(?<='
-# magicMBend = '&quot;:{&quot;size_mb&quot;:&quot;)(.*?)(?=.B)'
 magicMBend = '&quot;:{&quot;size_mb&quot;:&quot;)(.*?)(?=&quot;)'
 
-# magicMBstart = '&quot;:{&quot;size_mb&quot;:&quot;' # (?<=vorbis&quot;:{&quot;size_mb&quot;:&quot;)(.*)(?=MB)
-# magicMBend = ')(.*)(?=.B)'
 magicGrabURL = '(?<=https:\/\/popplers5.bandcamp.com\/download\/album\?enc=flac).+?(?=&quot)'
 urlStart = 'https://popplers5.bandcamp.com/download/album?enc='
 
@@ -36,7 +39,7 @@ def createDB():
     if (not res.fetchone()):
         print("making db")
         runString = "CREATE TABLE ALBUM(artist, album, site, dlURL"
-        for format in dlFormats:
+        for format in download_formats:
             formatR = format.replace("-", "_")
             runString += f", {formatR}"
         cur.execute(runString + ")")
@@ -50,7 +53,8 @@ def fixUni(inputString):
 def buildHrefList():
     temp = 1
     for tag in soup.find_all('span', class_="redownload-item"):
-        if (temp >= 100):
+        print(tag)
+        if (temp >= 500):
             pass
         else:
             href = tag.find('a')
@@ -90,10 +94,11 @@ def printDB():
     pList = list()
     index = 1
     dlList.append(None) # fix index
-    for artist, album, dlURL, flac in cur.execute("SELECT artist, album, dlURL, flac FROM album ORDER BY artist"):
+    for artist, album, dlURL, download_size in cur.execute(f"SELECT artist, album, dlURL, {chosen_format} FROM album ORDER BY artist"):
         dlList.append(dlURL)
-        pList.append(f"{index} - {artist} - {album} ({flac} MB)")
+        pList.append(f"{index} - {artist} - {album} ({download_size} MB)")
         index += 1
+    # Print the list out backwards
     for item in pList[::-1]:
         print(item)
 
@@ -107,18 +112,43 @@ def printDB():
         else:
             selList.append(dlList[int(x)])
 
+    # Iterate through the user-provided ranges, and append the download links to selList
     for x in rangeList:
         theRange = x.split("-")
-        for y in range(int(theRange[0]), int(theRange[1])):
+        lowerBound = int(theRange[0])
+        upperBound = int(theRange[1])
+        print(f"rangelist is {rangeList}; lowerBound is {lowerBound}, upperBound is {upperBound}")
+        for y in range(lowerBound, upperBound + 1):
+            print(f"attempting selList.append(dlList[{y}])")
             selList.append(dlList[y])
 
-
     for item in selList:
+        downloadAlbum(urlStart + chosen_format + item)
         print(item)
     #print(dlList[int(userInput)])
 
-    # ask user to pick one, or a range, to download. add up the size and show to user, give option to quit
-    # ok? then download p
+def downloadAlbum(url):
+    grab_sitem_regex = '(?<=sitem_id=).*'
+    sitem_list = re.findall(grab_sitem_regex, url)
+    sitem = None
+    if (len(sitem_list) > 0):
+        sitem = sitem_list[0]
+    else:
+        # Problem! URL did not contain sitem_id ???
+        print(f"Throwing error; no sitem in {url} detected!!")
+        return 1
+    print(f"trying to download {sitem}")
+    # TODO: check to see if downloads/{sitem}.zip exists already or not
+    response = requests.get(url, allow_redirects=True)
+    if (response.ok and response.status_code == 200):
+        with open('downloads/' + sitem + '.zip', 'wb') as f:
+            f.write(response.content)
+        f.close()
+    os.mkdir('downloads/' + sitem)
+    with ZipFile('downloads/' + sitem + '.zip', 'r') as zObject:
+        zObject.extractall(path='downloads/' + sitem)
+
+
 
 
 def visitPages():
@@ -161,10 +191,14 @@ def visitPages():
 # or maybe you could search by record label, artist, etc., depending on what info
 # is available
 
-# i'm thinking i could do some sort of dictionary of dictionaries, where the keys are a hash of the original href,
-# so you could avoid needing to constantly reload the albums' pages, but you wouldn't need to download everything in
-# one go unless you -really- wanted to. could also do some sort of search functionality to grab download links
-# as previously stated
+print("Choose encoding:")
+
+for encoding in download_formats:
+    formatR = encoding.replace("-", "_")
+    print(formatR)
+
+chosen_format = input("> ")
+
 
 createDB()
 buildHrefList()
