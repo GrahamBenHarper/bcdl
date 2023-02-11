@@ -3,7 +3,10 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
+
+# selenium exceptions
 from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import ElementNotInteractableException
 
 # TODO: can probably utilize selenium's sleep/wait functions instead;
 #       need to research them more
@@ -12,113 +15,183 @@ from time import sleep
 # regex
 import re
 
-# either for debugging or slow database building
-MAX_ALBUMS = 100
+# sqlite3
+import sqlite3
 
-# if the page is fully loaded
+# has it been TIMEOUT seconds without a change in the page? then it
+# is loaded.
 TIMEOUT = 10
 
-driver = webdriver.Firefox()
+# for debug messages & limiting number of albums to load
+DEBUG = True
+MAX_ALBUMS = 100
 
-# this URL will automatically bring us to the user's collection once signed in
-driver.get("https://bandcamp.com/login?from=fan_page")
-
-username_field = driver.find_element(by=By.NAME, value="username-field")
-password_field = driver.find_element(by=By.NAME, value="password-field")
-
-# TODO: grab these from either the command line, or allow the user to sign
-#       in on their own w/ the window
-username_field.send_keys("username")
-password_field.send_keys("password")
-
-password_field.send_keys(Keys.RETURN)
-
-driver.implicitly_wait(10)
-
-# check to see if we're signed in every 5 seconds. it's the user's
-# responsibility to solve any captchas or correct any incorrect passwords
-loaded = False
-while (not loaded):
-    try:
-        show_more_button = driver.find_element(by=By.CLASS_NAME,
-                                               value="show-more")
-        loaded = True
-    except NoSuchElementException:
-        print("No luck, waiting 5sec and trying again")
-        sleep(5)
+if (DEBUG):
+    debug_file = open('debug_log', 'a')
 
 
-# clicking once does not work as it merely "selects" the button area
-show_more_button.click()
-show_more_button.click()
+def main():
+    driver = webdriver.Firefox()
 
-# search for <li> blocks with an id that starts with ...
-xpath = "//li[contains(@id, 'collection-item-container_')]"
+    # this URL will automatically bring us to the user's collection once signed in
+    driver.get("https://bandcamp.com/login?from=fan_page")
+
+    username_field = driver.find_element(by=By.NAME, value="username-field")
+    password_field = driver.find_element(by=By.NAME, value="password-field")
+
+    # TODO: grab these from either the command line, or allow the user to sign
+    #       in on their own w/ the window
+
+    user = ''
+    pword = ''
+    if (DEBUG):
+        with open('user_pass', 'r') as login:
+            user = login.readline()
+            pword = login.readline()
+    username_field.send_keys(user)
+    password_field.send_keys(pword)
+
+    password_field.send_keys(Keys.RETURN)
+
+    driver.implicitly_wait(10)
+
+    # check to see if we're signed in every 5 seconds. it's the user's
+    # responsibility to solve any captchas or correct any incorrect passwords
+    loaded = False
+    while (not loaded):
+        try:
+            show_more_button = driver.find_element(by=By.CLASS_NAME,
+                                                   value="show-more")
+            loaded = True
+            # TODO: need to verify button clicking try/except stuffs is good
+            show_more_button.click()
+            show_more_button.click()
+        except NoSuchElementException:
+            log("No luck, waiting 5sec and trying again")
+            sleep(5)
+        except ElementNotInteractableException:
+            log("Failure with button clicking but i -think- we can continue...")
 
 
-# scroll down once every second until the page is fully loaded in.
-# once the page is loaded in, the 'elements' variable will contain
-# a list of every album to parse through
-album_count = 0
-test_counter = 0
-done_scrolling = False
-actions = ActionChains(driver)
-while (not done_scrolling):
-    # test_counter resets every 10 seconds; it's used to check essentially
-    # 'have we finished loading? or timed out?'
-    test_counter += 1
-    if test_counter > TIMEOUT:
-        test_counter = 0
-    actions.send_keys(Keys.PAGE_DOWN)
-    actions.send_keys(Keys.PAGE_DOWN)
-    actions.send_keys(Keys.PAGE_DOWN)
-    actions.perform()
-    sleep(1)
-    temp = album_count
-    elements = driver.find_elements(by=By.XPATH, value=xpath)
-    album_count = len(elements)
-    if (temp != album_count):
-        print(album_count)
-        if (album_count > MAX_ALBUMS):
-            done_scrolling = True
-    else:
-        # BUG: i think this is broken. 'temp' needs to reset every TIMEOUT
-        #      seconds, not on each cycle, otherwise we could coincidentally
-        #      have a moment where nothing loaded & we hit a 10 second marker.
-        #      in other words, we need to compare the number of albums TIMEOUT
-        #      ago to the number of albums right now.
-        if (test_counter == TIMEOUT) and (temp == album_count):
-            # it is very likely that we have hit the end of the page
-            done_scrolling = True
+    # search for <li> blocks with an id that starts with ...
+    xpath = "//li[contains(@id, 'collection-item-container_')]"
 
-print("We made it! WWWWWWWWOOOOOOOOOOOOOOOO")
+    # TODO: all of this is pretty ugly and can surely be done better
+    #
+    # scroll down once every second until the page is fully loaded in.
+    # once the page is loaded in, the 'elements' variable will contain
+    # a list of every album to parse through
+    timeout_album_count = 0
+    current_album_count = 0
+    test_counter = 0
+    done_scrolling = False
+    actions = ActionChains(driver)
+    while (not done_scrolling):
+        # test_counter resets every 10 seconds; it's used to check essentially
+        # 'have we finished loading? or timed out?'
+        test_counter += 1
+        if test_counter > TIMEOUT:
+            test_counter = 0
+        actions.send_keys(Keys.PAGE_DOWN)
+        actions.send_keys(Keys.PAGE_DOWN)
+        actions.send_keys(Keys.PAGE_DOWN)
+        actions.perform()
+        sleep(1)
+        previous_album_count = current_album_count
+        elements = driver.find_elements(by=By.XPATH, value=xpath)
+        current_album_count = len(elements)
+        if (previous_album_count != current_album_count):
+            log(current_album_count)
+            if (current_album_count > MAX_ALBUMS):
+                done_scrolling = True
+        else:
+            # BUG: i think this is broken. 'temp' needs to reset every TIMEOUT
+            #      seconds, not on each cycle, otherwise we could coincidentally
+            #      have a moment where nothing loaded & we hit a 10 second marker.
+            #      in other words, we need to compare the number of albums TIMEOUT
+            #      ago to the number of albums right now.
 
-grab_artist_regex = '(?<=by ).+?(?=\n)'
+            if (test_counter == TIMEOUT) and (previous_album_count == current_album_count):
+                # it is very likely that we have hit the end of the page
+                done_scrolling = True
 
-# BUG: the artist regex and looking for 'PRIVATE' can fail due to:
-#      1. the name of a song/etc could contain 'PRIVATE,' setting this to True
-#      2. the 'by ' could match more than one thing
-#      proposed fixes:- perhaps regex for a string strictly named '\nPRIVATE\n'
-#                     - count 'by ' matches; if there is more than one then
-#                       probably check album, if album is no then use
-#                       first match
-for element in elements:
-    # TODO: capture popularity via 'appears in [POPULARITY] other collections'
-    album_name = element.get_attribute("data-title")
-    artist_name = re.findall(grab_artist_regex, element.text)[0]
-    if 'PRIVATE' in element.text:
-        is_private = True
-    else:
-        is_private = False
-    print(f'artist: {artist_name}, album name: {album_name},'
-          'private: {is_private}')
-    print(element.text)
+    # if we've reached htis point, our page is all loaded in and we simply need
+    # to begin parsing it
 
-    if 'download' in element.text:
-        # first download_link is a 'download' element
-        download_link = element.find_element(by=By.PARTIAL_LINK_TEXT,
-                                             value='download')
-        # then download_link is converted to a string, containing the link
-        download_link = download_link.get_attribute("href")
-        print(download_link)
-    print('---------------------')
+    grab_artist_regex = '(?<=by ).+?(?=\n)'
+    grab_popularity_regex = '(?<=appears in ).+?(?= )'
+
+    # BUG: the artist regex and looking for 'PRIVATE' can fail due to:
+    #      1. the name of a song/etc could contain 'PRIVATE,' setting this to True
+    #      2. the 'by ' could match more than one thing
+    #      proposed fixes:- perhaps regex for a string strictly named '\nPRIVATE\n'
+    #                     - count 'by ' matches; if there is more than one then
+    #                       probably check album, if album is no then use
+    #                       first match
+    for element in elements:
+        # TODO: capture popularity via 'appears in [POPULARITY] other collections'
+        album_name = element.get_attribute("data-title")
+        artist_name = re.findall(grab_artist_regex, element.text)[0]
+        try:
+            popularity = []
+            popularity = re.findall(grab_popularity_regex, element.text)
+            if len(popularity) > 0:
+                popularity = int(popularity[0])
+            else:
+                popularity = 0
+        except:
+            popularity = 0
+        if 'PRIVATE' in element.text:
+            is_private = True
+        else:
+            is_private = False
+        log(f'artist: {artist_name}, album name: {album_name}, '
+            f'private: {is_private}, popularity: {popularity}')
+        log(element.text)
+
+        if 'download' in element.text:
+            # first download_link is a 'download' element
+            download_link = element.find_element(by=By.PARTIAL_LINK_TEXT,
+                                                 value='download')
+            # then download_link is converted to a string, containing the link
+            download_link = download_link.get_attribute("href")
+            log(download_link)
+        log('---------------------')
+
+    driver.quit()
+
+
+def create_db():
+    '''Creates a table named ALBUM with the properties
+       artist, album, download, popularity
+       if it does not already exist'''
+    con = sqlite3.connect("bcdl_new.db")
+    cur = con.cursor()
+    res = cur.execute("SELECT name FROM sqlite_master")
+    if (not res.fetchone()):
+        log("making db")
+        run_string = "CREATE TABLE ALBUM(artist, album, download, popularity)"
+        cur.execute(run_string)
+
+
+def log(message):
+    '''Print and record a debug message'''
+    message = str(message)
+    if (DEBUG):
+        print(message)
+        debug_file.write(message + '\n')
+
+
+def fix_unicode_string(input_string):
+    '''Hacky fix for some unicode characters, since problems
+    seem to arise with album and artist names that use these characters'''
+    # https://stackoverflow.com/questions/51885694/how-to-decode-backslash-scapes-strings-in-python
+    output_string = input_string.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
+    log(f'{input_string} being returned as {output_string}')
+    return output_string
+
+
+if __name__ == "__main__":
+    main()
+    if (DEBUG):
+        debug_file.close()

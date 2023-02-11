@@ -1,6 +1,10 @@
 bc_files/
 downloads/
 bcdl.db
+bcdl_new.db
 bc.html
 encReference
 geckodriver.log
+user_pass
+.ycm_extra_conf.py
+debug_log
