@@ -1,10 +1,8 @@
 # bcdl.py
 
-(NOTE: I wouldn't even consider this project to be in an 'alpha' phase; currently it's just a tool I'm using to automate some music downloading from bandcamp and is essentially a novelty)
-
 My first project here on github!
 
-In addition to automating downloading some albums from bandcamp, this project has also been an excuse for me to learn and utilize, sqlite3, regex, and BeautifulSoup.
+In addition to automating album downloading from bandcamp, this project has also been an excuse for me to learn and utilize sqlite3, regex, and BeautifulSoup. Bandcamp recent broke the functionality of this script, so now it's also an excuse to learn selenium :)
 
 ## Goals
 
@@ -17,12 +15,12 @@ The ultimate goal behind this project is to be able to:
 
 ## Current state
 
-At this time, the project requires that you sign into bandcamp in a browser and save your collection as a file named `bc.html`. This file will be read by the script.
+The original script required that you sign into your bandcamp and manually save your collection as an html file that the script could read and build a database with. As of February 8th, bandcamp started requiring a 'token' to download purchased albums which can only be gathered by signing in. **The script is currently broken** but I'm working on rewriting the core functionality in selenium, which will solve a lot of problems once it's finished
 
-To do this, simply open up your collection, click "view all X items," and scroll all the way to the very bottom to load in all of the different releases. Once everything is loaded, you can save this page (I believe CTRL-S should work in most browsers). Name it `bc.html` and place it in the same directory as this script.
+## Planned functionality
 
-## Known problems
+I believe that the script should take command-line arguments for `username`, `password`, `MAX_ALBUMS`, `TIMEOUT`, `format` and should have some way specify that the user is looking to search through an existing database rather than rebuilding the database. Perhaps default behavior is to build or update the locally-stored database.
 
-1. As of Febuary 8th, the server bandcamp uses for serving up ZIP files has changed, which has broken the script. This may be a simple fix but I just wanted to whip up a quick README.md before logging off for the day. I will be fixing this shortly
+Searching will ideally allow for some advanced options, but for now I think the simplest is a broad string match on artist/album either sorted alphabetically or by 'popularity' (number of people who own the album).
 
-2. The script cannot download subscription-gated releases, as these require the user to be signed in
+Download pages will be stored in the database, but still require the user to be signed in. It is likely mostly trivial to ie: select to download 10 albums, then iterate through the 10 download pages, adding the actual ZIP URLs to a list to parse through later, and then iterating through that list start-to-finish; alternatively, instead of creating a list to iterate through later, it could load the download page and then download/process the ZIP one-by-one.
