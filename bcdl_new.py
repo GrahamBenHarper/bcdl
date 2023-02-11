@@ -72,7 +72,6 @@ def main():
         except ElementNotInteractableException:
             log("Failure with button clicking but i -think- we can continue...")
 
-
     # search for <li> blocks with an id that starts with ...
     xpath = "//li[contains(@id, 'collection-item-container_')]"
 
@@ -81,39 +80,38 @@ def main():
     # scroll down once every second until the page is fully loaded in.
     # once the page is loaded in, the 'elements' variable will contain
     # a list of every album to parse through
-    timeout_album_count = 0
-    current_album_count = 0
-    test_counter = 0
-    done_scrolling = False
+    current_album_count = 1
+    previous_album_count = 0
+    second_counter = 0
     actions = ActionChains(driver)
-    while (not done_scrolling):
-        # test_counter resets every 10 seconds; it's used to check essentially
-        # 'have we finished loading? or timed out?'
-        test_counter += 1
-        if test_counter > TIMEOUT:
-            test_counter = 0
+    while (True):
+
+        elements = driver.find_elements(by=By.XPATH, value=xpath)
+        current_album_count = len(elements)
+
+        if (previous_album_count == current_album_count):
+            break
+        elif (current_album_count > MAX_ALBUMS):
+            break
+
+        # TODO: i believe the number of keypresses needed is going to change depending
+        #       on the size of the window; maybe i'll have to whip up some sort of
+        #       equation that takes window height as input and spits out the number
+        #       of keypresses required
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
         actions.perform()
-        sleep(1)
-        previous_album_count = current_album_count
-        elements = driver.find_elements(by=By.XPATH, value=xpath)
-        current_album_count = len(elements)
-        if (previous_album_count != current_album_count):
-            log(current_album_count)
-            if (current_album_count > MAX_ALBUMS):
-                done_scrolling = True
-        else:
-            # BUG: i think this is broken. 'temp' needs to reset every TIMEOUT
-            #      seconds, not on each cycle, otherwise we could coincidentally
-            #      have a moment where nothing loaded & we hit a 10 second marker.
-            #      in other words, we need to compare the number of albums TIMEOUT
-            #      ago to the number of albums right now.
 
-            if (test_counter == TIMEOUT) and (previous_album_count == current_album_count):
-                # it is very likely that we have hit the end of the page
-                done_scrolling = True
+        second_counter += 1
+        sleep(1)
+
+        if second_counter > TIMEOUT:
+            log('resetting second_counter; previous/current: ' +
+                f'{previous_album_count}/{current_album_count}')
+
+            previous_album_count = current_album_count
+            second_counter = 0
 
     # if we've reached htis point, our page is all loaded in and we simply need
     # to begin parsing it
