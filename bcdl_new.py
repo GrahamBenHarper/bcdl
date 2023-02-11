@@ -33,7 +33,8 @@ if (DEBUG):
 def main():
     driver = webdriver.Firefox()
 
-    # this URL will automatically bring us to the user's collection once signed in
+    # this URL will automatically bring us to the user's collection
+    # after signing in
     driver.get("https://bandcamp.com/login?from=fan_page")
 
     username_field = driver.find_element(by=By.NAME, value="username-field")
@@ -64,19 +65,26 @@ def main():
                                                    value="show-more")
             loaded = True
             # TODO: need to verify button clicking try/except stuffs is good
+            # 2/11 update: tbh it's hacky but probably fine to call it done
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
             log("No luck, waiting 5sec and trying again")
             sleep(5)
         except ElementNotInteractableException:
-            log("Failure with button clicking but i -think- we can continue...")
+            # explanation: generally we need 2 button clicks to load the
+            # additional elements. however, it seems that sometimes a single
+            # click is enough. if we hit this exception, it means that
+            # the webdriver was able to find the element, however after 0 or 1
+            # clicks, it is no longer able to find it anymore. this -probably-
+            # means that the additional elements have been loaded, therefore
+            # we no longer need to click and we can just continue on as if
+            # nothing happened
+            log("Failure with button clicking but i -think- we can continue..")
 
     # search for <li> blocks with an id that starts with ...
     xpath = "//li[contains(@id, 'collection-item-container_')]"
 
-    # TODO: all of this is pretty ugly and can surely be done better
-    #
     # scroll down once every second until the page is fully loaded in.
     # once the page is loaded in, the 'elements' variable will contain
     # a list of every album to parse through
@@ -94,10 +102,10 @@ def main():
         elif (current_album_count > MAX_ALBUMS):
             break
 
-        # TODO: i believe the number of keypresses needed is going to change depending
-        #       on the size of the window; maybe i'll have to whip up some sort of
-        #       equation that takes window height as input and spits out the number
-        #       of keypresses required
+        # TODO: i believe the number of keypresses needed is going to change
+        #       depending on the size of the window; maybe i'll have to whip
+        #       up some sort of equation that takes window height as input
+        #       and spits out the number of keypresses required
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
@@ -127,7 +135,6 @@ def main():
     #                       probably check album, if album is no then use
     #                       first match
     for element in elements:
-        # TODO: capture popularity via 'appears in [POPULARITY] other collections'
         album_name = element.get_attribute("data-title")
         artist_name = re.findall(grab_artist_regex, element.text)[0]
         try:
@@ -178,15 +185,6 @@ def log(message):
     if (DEBUG):
         print(message)
         debug_file.write(message + '\n')
-
-
-def fix_unicode_string(input_string):
-    '''Hacky fix for some unicode characters, since problems
-    seem to arise with album and artist names that use these characters'''
-    # https://stackoverflow.com/questions/51885694/how-to-decode-backslash-scapes-strings-in-python
-    output_string = input_string.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
-    log(f'{input_string} being returned as {output_string}')
-    return output_string
 
 
 if __name__ == "__main__":
