@@ -17,6 +17,11 @@ file.close()
 con = sqlite3.connect("bcdl.db")
 cur = con.cursor()
 
+# debug vars
+DEBUG = True
+MAX_ALBUMS_TO_PARSE = 50  # how many albums to add to db
+
+
 links_to_parse = list()
 
 download_formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac',
@@ -26,13 +31,19 @@ chosen_format = 'flac'
 magicMBstart = '(?<='
 magicMBend = '&quot;:{&quot;size_mb&quot;:&quot;)(.*?)(?=&quot;)'
 
-
+# https://p4.bcbits.com/download/album/1194b
 # while doing some refactoring i've realized that the grab URL has changed;
 # i need to do further testing but i believe 'popplers5.bandcamp' will need
 # to be changed to 'p4.bcbits'
-magicGrabURL = '(?<=https:\/\/popplers5.bandcamp.com' \
-               '\/download\/album\?enc=flac).+?(?=&quot)'
-urlStart = 'https://popplers5.bandcamp.com/download/album?enc='
+# regex_grab_url = '(?<=https:\/\/popplers5.bandcamp.com' \
+#               '\/download\/album\?enc=flac).+?(?=&quot)'
+# download_url_start = 'https://popplers5.bandcamp.com/download/album?enc='
+
+# https://bandcamp.com/download?from=collection&amp;payment_id=3171398704&amp;sig=53ec317ea9ae5a2d5ae476b30d605bfc&amp;sitem_id=106379549
+regex_grab_url = '(?<=https:\/\/p4.bcbits.com' \
+                 '\/download\/album\?enc=flac).+?(?=&quot)'
+
+download_url_start = 'https://p4.bcbits.com/download/album?enc='
 
 
 http = urllib3.PoolManager()
@@ -58,10 +69,15 @@ def main():
     con.close()
 
 
+def log(text):
+    if (DEBUG):
+        print(text)
+
+
 def createDB():
     res = cur.execute("SELECT name FROM sqlite_master")
     if (not res.fetchone()):
-        print("making db")
+        log("making db")
         runString = "CREATE TABLE ALBUM(artist, album, site, dlURL"
         for format in download_formats:
             formatR = format.replace("-", "_")
@@ -74,18 +90,19 @@ def fix_unicode_string(inputString):
     seem to arise with album and artist names that use these characters'''
     # https://stackoverflow.com/questions/51885694/how-to-decode-backslash-scapes-strings-in-python
     outputString = inputString.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
-    # print(f'{inputString} being returned as {outputString}')
+    log(f'{inputString} being returned as {outputString}')
     return outputString
+
 
 def buildHrefList():
     temp = 1
     for tag in soup.find_all('span', class_="redownload-item"):
-        print(tag)
-        if (temp >= 500):
+        if (temp >= MAX_ALBUMS_TO_PARSE):
             pass
         else:
             href = tag.find('a')
             link = href.get('href')
+            # log(f'href is {href}, link is {link}, appending now')
             links_to_parse.append(link)
             temp += 1
 
@@ -93,7 +110,9 @@ def buildHrefList():
 def siteInDB(site):
     res = cur.execute(f"SELECT site FROM album WHERE site='{site}'")
     if (not res.fetchall()):
+        log(f'{site} was not in db, returning False')
         return False
+    log(f'{site} was in db, returning True')
     return True
 
 
@@ -154,7 +173,7 @@ def printDB():
             selList.append(dlList[y])
 
     for item in selList:
-        downloadAlbum(urlStart + chosen_format + item)
+        downloadAlbum(download_url_start + chosen_format + item)
         print(item)
     #print(dlList[int(userInput)])
 
@@ -184,7 +203,6 @@ def downloadAlbum(url):
 def visitPages():
     for link in links_to_parse:
         match = None
-        #print(site)
         if(not siteInDB(link)):
             try:
                 r = http.request('GET', link)
@@ -194,8 +212,9 @@ def visitPages():
                 data = str(r.data)
                 # (?<=https:\/\/popplers5.bandcamp.com\/download\/album\?enc=flac).+?(?=&quot)
                 # match = re.findall("https:\/\/popplers5.bandcamp.com/download/album\?enc=flac.+?(?=&quot)", data)
-                match = re.sub("\&amp;", "&", re.findall(magicGrabURL, data)[0])
+                match = re.sub("\&amp;", "&", re.findall(regex_grab_url, data)[0])
             except:
+                log(f'hit an exception regexing for {regex_grab_url}, returning None')
                 match = None
             if (match):
                 soup = BeautifulSoup(data, "html5lib")
