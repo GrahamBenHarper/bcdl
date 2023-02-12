@@ -8,8 +8,6 @@ from selenium.webdriver import ActionChains
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
 
-# TODO: can probably utilize selenium's sleep/wait functions instead;
-#       need to research them more
 from time import sleep
 
 # regex
@@ -22,6 +20,9 @@ import sqlite3
 # is loaded.
 TIMEOUT = 10
 
+# how long to wait for the user to sign in, in seconds
+SIGN_IN_TIMEOUT = 15
+
 # for debug messages & limiting number of albums to load
 DEBUG = True
 MAX_ALBUMS = 100
@@ -31,17 +32,27 @@ if (DEBUG):
 
 DB_LOCATION = "bcdl_new.db"
 
+shared_driver = webdriver.Firefox()
+
 
 def main():
-    create_db()
-    driver = webdriver.Firefox()
+    refresh_db()
+
+
+def sign_in():
+    '''Will attempt to sign the user into their bandcamp account, load up
+    their collection, and click 'show more.' If sign_in() returns True, that
+    means that the driver is now authenticated and loaded into the user's
+    collection'''
 
     # this URL will automatically bring us to the user's collection
     # after signing in
-    driver.get("https://bandcamp.com/login?from=fan_page")
+    shared_driver.get("https://bandcamp.com/login?from=fan_page")
 
-    username_field = driver.find_element(by=By.NAME, value="username-field")
-    password_field = driver.find_element(by=By.NAME, value="password-field")
+    username_field = shared_driver.find_element(by=By.NAME,
+                                                value="username-field")
+    password_field = shared_driver.find_element(by=By.NAME,
+                                                value="password-field")
 
     # TODO: grab these from either the command line, or allow the user to sign
     #       in on their own w/ the window
@@ -57,22 +68,28 @@ def main():
 
     password_field.send_keys(Keys.RETURN)
 
-    driver.implicitly_wait(10)
+    shared_driver.implicitly_wait(10)
 
-    # check to see if we're signed in every 5 seconds. it's the user's
-    # responsibility to solve any captchas or correct any incorrect passwords
+    # check to see if we're signed in every 5 seconds & attempt to click the
+    # 'show more' button. it's the user's responsibility to solve any captchas
+    # or correct any incorrect passwords
+    time_waited = 0
     loaded = False
     while (not loaded):
         try:
-            show_more_button = driver.find_element(by=By.CLASS_NAME,
-                                                   value="show-more")
+            show_more_button = shared_driver.find_element(by=By.CLASS_NAME,
+                                                          value="show-more")
             loaded = True
             # TODO: need to verify button clicking try/except stuffs is good
             # 2/11 update: tbh it's hacky but probably fine to call it done
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
-            log("INFO", "No luck, waiting 5sec and trying again")
+            if (time_waited >= SIGN_IN_TIMEOUT):
+                return False
+            log("INFO", f"No luck, have waited {time_waited} seconds; waiting "
+                f"another 5 seconds (max timeout {SIGN_IN_TIMEOUT})")
+            time_waited += 5
             sleep(5)
         except ElementNotInteractableException:
             # explanation: generally we need 2 button clicks to load the
@@ -85,6 +102,24 @@ def main():
             # nothing happened
             log("INFO", "Failure with button clicking but i -think- we can continue..")
 
+    # if we made out out of the loop, then we're signed in
+    return True
+
+
+def refresh_db():
+    # TODO: maybe could return -1 on failure, and numbers of albums added on
+    #       success
+    '''Will call sign_in() and add any new albums into the database.
+    Will stop after MAX_ALBUMS albums. Returns boolean depending on
+    success'''
+    # (ie: if you only purchased 5 new albums since the last refresh, there's
+    # probably no need to go through all 2000 albums owned)
+
+    create_db()
+    if (not sign_in()):
+        log("ERROR", "failed to sign in!")
+        return False
+
     # search for <li> blocks with an id that starts with ...
     xpath = "//li[contains(@id, 'collection-item-container_')]"
 
@@ -94,10 +129,10 @@ def main():
     current_album_count = 1
     previous_album_count = 0
     seconds_counter = 0
-    actions = ActionChains(driver)
+    actions = ActionChains(shared_driver)
     while (True):
 
-        elements = driver.find_elements(by=By.XPATH, value=xpath)
+        elements = shared_driver.find_elements(by=By.XPATH, value=xpath)
         current_album_count = len(elements)
 
         if (previous_album_count == current_album_count):
@@ -178,7 +213,8 @@ def main():
             log("ERROR", f"no download present in {element.text}")
         log('', '---------------------')
 
-    driver.quit()
+    shared_driver.quit()
+    return True
 
 
 def create_db():
@@ -195,8 +231,9 @@ def create_db():
         cur.execute(run_string)
 
 
-# TODO: maybe rename this function
-def dl_page_in_db(download_page):
+def is_dl_page_in_db(download_page):
+    '''Returns True if the provided download_page is already in the database,
+    otherwise false'''
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
     res = cur.execute(f"SELECT download_page FROM ALBUM WHERE download_page='{download_page}'")
@@ -210,12 +247,14 @@ def dl_page_in_db(download_page):
 
 
 def add_to_db(artist_name, album_name, popularity, is_private, download_page):
+    '''Adds provided arguments into the database, as long as download_page is
+    not already in the database'''
     # TODO: can bring con and cur outside of the scope of this function &
     # expose it to the rest of the script, instead of constantly open/close
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
     data = [artist_name, album_name, popularity, is_private, download_page]
-    if (not dl_page_in_db(download_page)):
+    if (not is_dl_page_in_db(download_page)):
         cur.execute("INSERT INTO ALBUM VALUES(?, ?, ?, ?, ?)", data)
         con.commit()
         con.close()
@@ -230,6 +269,11 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page):
     return False
 
 
+# TODO: this function should be updated to take some sort of input. Let's say
+# the user wants to search for the string XYZ, or for all albums by a single
+# artist, and wants to limit to X results, sort in ascending/descending order
+# etc. Perhaps this then can return a download_page list() with each index
+# corresponding to the index printed next to each result
 def print_db():
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
@@ -267,5 +311,6 @@ def log(type, message):
 if __name__ == "__main__":
     main()
     print_db()
+    shared_driver.quit()
     if (DEBUG):
         debug_file.close()
