@@ -31,6 +31,7 @@ if (DEBUG):
 
 
 def main():
+    create_db()
     driver = webdriver.Firefox()
 
     # this URL will automatically bring us to the user's collection
@@ -135,6 +136,7 @@ def main():
     #                       probably check album, if album is no then use
     #                       first match
     for element in elements:
+        # BUG: album_name will return NULL if it's a fanclub release
         album_name = element.get_attribute("data-title")
         artist_name = re.findall(grab_artist_regex, element.text)[0]
         try:
@@ -152,15 +154,16 @@ def main():
             is_private = False
         log(f'artist: {artist_name}, album name: {album_name}, '
             f'private: {is_private}, popularity: {popularity}')
-        log(element.text)
+        # log(element.text)
 
         if 'download' in element.text:
-            # first download_link is a 'download' element
-            download_link = element.find_element(by=By.PARTIAL_LINK_TEXT,
+            # first download_page is a 'download' element
+            download_page = element.find_element(by=By.PARTIAL_LINK_TEXT,
                                                  value='download')
-            # then download_link is converted to a string, containing the link
-            download_link = download_link.get_attribute("href")
-            log(download_link)
+            # then download_page is converted to a string, containing the link
+            download_page = download_page.get_attribute("href")
+            log(download_page)
+            add_to_db(artist_name, album_name, str(popularity), str(is_private), download_page)
         log('---------------------')
 
     driver.quit()
@@ -175,8 +178,44 @@ def create_db():
     res = cur.execute("SELECT name FROM sqlite_master")
     if (not res.fetchone()):
         log("making db")
-        run_string = "CREATE TABLE ALBUM(artist, album, download, popularity)"
+        # TODO: should be typing column names, ie: artist_name TEXT popularity INTEGER etc
+        run_string = "CREATE TABLE ALBUM(artist_name, album_name, popularity, private, download_page)"
         cur.execute(run_string)
+
+
+# TODO: maybe rename this function
+def dl_page_in_db(download_page):
+    con = sqlite3.connect("bcdl_new.db")
+    cur = con.cursor()
+    res = cur.execute(f"SELECT download_page FROM ALBUM WHERE download_page='{download_page}'")
+    if (not res.fetchall()):
+        log(f'{download_page} was not in db, returning False')
+        con.close()
+        return False
+    log(f'{download_page} was in db, returning True')
+    con.close()
+    return True
+
+
+def add_to_db(artist_name, album_name, popularity, private, download_page):
+    # TODO: can bring con and cur outside of the scope of this function &
+    # expose it to the rest of the script, instead of constantly open/close
+    con = sqlite3.connect("bcdl_new.db")
+    cur = con.cursor()
+    data = [artist_name, album_name, popularity, private, download_page]
+    if (not dl_page_in_db(download_page)):
+        cur.execute("INSERT INTO album VALUES(?, ?, ?, ?, ?)", data)
+        con.commit()
+        con.close()
+        log(f'{album_name} added to db')
+        return True
+    else:
+        log(f'{album_name} failed to add to db; probably already in there')
+        con.close()
+        return False
+    log(f'something went wrong while adding {album_name}!!!')
+    con.close()
+    return False
 
 
 def log(message):
