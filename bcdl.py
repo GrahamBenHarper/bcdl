@@ -7,6 +7,7 @@ from selenium.webdriver import ActionChains
 # selenium exceptions
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
+from selenium.common.exceptions import WebDriverException
 
 from time import sleep
 
@@ -120,9 +121,6 @@ def refresh_db():
         log("ERROR", "failed to sign in!")
         return False
 
-    # search for <li> blocks with an id that starts with ...
-    xpath = "//li[contains(@id, 'collection-item-container_')]"
-
     # scroll down once every second until the page is fully loaded in.
     # once the page is loaded in, the 'elements' variable will contain
     # a list of every album to parse through
@@ -130,8 +128,11 @@ def refresh_db():
     previous_album_count = 0
     seconds_counter = 0
     actions = ActionChains(shared_driver)
-    while (True):
 
+    # search for <li> blocks with an id that starts with ...
+    xpath = "//li[contains(@id, 'collection-item-container_')]"
+
+    while (True):
         elements = shared_driver.find_elements(by=By.XPATH, value=xpath)
         current_album_count = len(elements)
 
@@ -159,32 +160,41 @@ def refresh_db():
             previous_album_count = current_album_count
             seconds_counter = 0
 
-    # if we've reached htis point, our page is all loaded in and we simply need
+    # if we've reached this point, our page is all loaded in and we simply need
     # to begin parsing it
 
-    grab_artist_regex = '(?<=by ).+?(?=\n)'
-    grab_popularity_regex = '(?<=appears in ).+?(?= )'
+    grab_popularity_regex = '\\d+'
+    grab_short_page_regex = '(?<=https:\\/\\/).+?(?=\\/album)'
 
-    # BUG: the artist regex and looking for 'PRIVATE' can fail due to:
-    #      1. the name of a song/etc could contain 'PRIVATE,' setting this to True
-    #      2. the 'by ' could match more than one thing
-    #      proposed fixes:- perhaps regex for a string strictly named '\nPRIVATE\n'
-    #                     - count 'by ' matches; if there is more than one then
-    #                       probably check album, if album is no then use
-    #                       first match
+    # xpath strings
+    title_xpath = ".//div[@class='collection-item-title']"
+    pop_xpath = ".//div[@class='collected-by']//a[@class='item-link also-link']"
+    artist_xpath = ".//div[@class='collection-item-artist']"
+    bc_xpath = ".//a[@class='item-link']"
+
     for element in elements:
-        # scrape album_name
-        # BUG: album_name will return NULL if it's a fanclub release
-        album_name = element.get_attribute("data-title")
+        # BUG:new bug introduced; if the album is labeled as 'private,'
+        #     it will fail to find the artist/album title
+        #     potential fix: look for 'private' first, and then treat
+        #     the search differently. bug was only just introduced
+        #     after squashing the fan club bug
+        title_element = element.find_element(by=By.XPATH, value=title_xpath)
+        pop_element = element.find_element(by=By.XPATH, value=pop_xpath)
+        artist_element = element.find_element(by=By.XPATH, value=artist_xpath)
+        bc_element = element.find_element(by=By.XPATH, value=bc_xpath)
 
-        # scrape artist_name
-        # BUG: (see bug description above for block)
-        artist_name = re.findall(grab_artist_regex, element.text)[0]
+        # grab out the full bandcamp link
+        bc_long = bc_element.get_attribute('href')
 
-        # scrape popularity score
+        # grab out album/artist
+        album_name = title_element.text
+        artist_name = artist_element.text
+
+        # regex out popularity & convert to integer
+        # TODO: remove try/except block so we don't have a bare except
         try:
             popularity = []
-            popularity = re.findall(grab_popularity_regex, element.text)
+            popularity = re.findall(grab_popularity_regex, pop_element.text)
             if len(popularity) > 0:
                 popularity = int(popularity[0])
             else:
@@ -192,26 +202,45 @@ def refresh_db():
         except:
             popularity = 0
 
+        # regex the shortlink out
+        # TODO: remove try/except to see if it's even necessary
+        try:
+            bc_short = []
+            bc_short = re.findall(grab_short_page_regex, bc_long)
+            if len(bc_short) > 0:
+                bc_short = bc_short[0]
+            else:
+                bc_short = "ERROR"
+        except:
+            bc_short = "ERROR"
+            log("ERROR", "Failed to grab bc_short out of {bc_long}")
+
         # scrape whether or not the album is private
-        # BUG: (see bug description above for block)
+        # BUG: this will flag any artist/album name containing the word
+        #      'PRIVATE' as a private album
         if 'PRIVATE' in element.text:
             is_private = 1
         else:
             is_private = 0
 
-        log('INFO', f'artist: {artist_name}, album name: {album_name}, '
-            f'private: {is_private}, popularity: {popularity}')
+        # grab out 'download' href if it exists
         if 'download' in element.text:
             # first download_page is a 'download' element
             download_page = element.find_element(by=By.PARTIAL_LINK_TEXT,
                                                  value='download')
             # then download_page is converted to a string, containing the link
             download_page = download_page.get_attribute("href")
-            log('', download_page)
-            add_to_db(artist_name, album_name, popularity, is_private, download_page)
+            add_to_db(artist_name, album_name, popularity, is_private,
+                      download_page, bc_long, bc_short)
         else:
+            download_page = "ERROR"
             log("ERROR", f"no download present in {element.text}")
-        log('', '---------------------')
+
+        log('INFO', f'artist: {artist_name}, album name: {album_name}, '
+            f'private: {is_private}, popularity: {popularity} '
+            f'bc link & short: {bc_long} & {bc_short} '
+            f' download: {download_page}\n'
+            '----------------------------------------------------------')
 
     shared_driver.quit()
     return True
@@ -226,8 +255,9 @@ def create_db():
     res = cur.execute("SELECT name FROM sqlite_master")
     if (not res.fetchone()):
         log("INFO", "making db")
-        # TODO: should be typing column names, ie: artist_name TEXT popularity INTEGER etc
-        run_string = "CREATE TABLE ALBUM(artist_name TEXT, album_name TEXT, popularity INTEGER, is_private INTEGER, download_page TEXT)"
+        run_string = "CREATE TABLE ALBUM(artist_name TEXT, album_name TEXT, "
+        run_string += "popularity INTEGER, is_private INTEGER, "
+        run_string += "download_page TEXT, bc_long TEXT, bc_short TEXT)"
         cur.execute(run_string)
 
 
@@ -246,16 +276,17 @@ def is_dl_page_in_db(download_page):
     return True
 
 
-def add_to_db(artist_name, album_name, popularity, is_private, download_page):
+def add_to_db(artist_name, album_name, popularity, is_private, download_page,
+              bc_long, bc_short):
     '''Adds provided arguments into the database, as long as download_page is
     not already in the database'''
     # TODO: can bring con and cur outside of the scope of this function &
     # expose it to the rest of the script, instead of constantly open/close
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
-    data = [artist_name, album_name, popularity, is_private, download_page]
+    data = [artist_name, album_name, popularity, is_private, download_page, bc_long, bc_short]
     if (not is_dl_page_in_db(download_page)):
-        cur.execute("INSERT INTO ALBUM VALUES(?, ?, ?, ?, ?)", data)
+        cur.execute("INSERT INTO ALBUM VALUES(?, ?, ?, ?, ?, ?, ?)", data)
         con.commit()
         con.close()
         log('INFO', f'{album_name} added to db')
