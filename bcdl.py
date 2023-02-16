@@ -7,7 +7,6 @@ from selenium.webdriver import ActionChains
 # selenium exceptions
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
-from selenium.common.exceptions import WebDriverException
 
 from time import sleep
 
@@ -165,6 +164,7 @@ def refresh_db():
 
     grab_popularity_regex = '\\d+'
     grab_short_page_regex = '(?<=https:\\/\\/).+?(?=\\/album)'
+    grab_priv_artist_regex = '(?<=by ).+?(?=\n)'
 
     # xpath strings
     title_xpath = ".//div[@class='collection-item-title']"
@@ -173,11 +173,14 @@ def refresh_db():
     bc_xpath = ".//a[@class='item-link']"
 
     for element in elements:
-        # BUG:new bug introduced; if the album is labeled as 'private,'
-        #     it will fail to find the artist/album title
-        #     potential fix: look for 'private' first, and then treat
-        #     the search differently. bug was only just introduced
-        #     after squashing the fan club bug
+        # scrape whether or not the album is private
+        # BUG: this will flag any artist/album name containing the word
+        #      'PRIVATE' as a private album
+        if 'PRIVATE' in element.text:
+            is_private = 1
+        else:
+            is_private = 0
+
         title_element = element.find_element(by=By.XPATH, value=title_xpath)
         pop_element = element.find_element(by=By.XPATH, value=pop_xpath)
         artist_element = element.find_element(by=By.XPATH, value=artist_xpath)
@@ -187,8 +190,14 @@ def refresh_db():
         bc_long = bc_element.get_attribute('href')
 
         # grab out album/artist
-        album_name = title_element.text
-        artist_name = artist_element.text
+        if (not is_private):
+            album_name = title_element.text
+            artist_name = artist_element.text
+            # chop off the "by" in "by Artist Name"
+            artist_name = artist_name[3:]
+        else:
+            album_name = element.get_attribute("data-title")
+            artist_name = re.findall(grab_priv_artist_regex, element.text)[0]
 
         # regex out popularity & convert to integer
         # TODO: remove try/except block so we don't have a bare except
@@ -202,26 +211,22 @@ def refresh_db():
         except:
             popularity = 0
 
-        # regex the shortlink out
-        # TODO: remove try/except to see if it's even necessary
-        try:
-            bc_short = []
-            bc_short = re.findall(grab_short_page_regex, bc_long)
-            if len(bc_short) > 0:
-                bc_short = bc_short[0]
-            else:
+        # regex the shortlink out if not private
+        # (there is no long link for private releases)
+        if (not is_private):
+            # TODO: remove try/except to see if it's even necessary
+            try:
+                bc_short = []
+                bc_short = re.findall(grab_short_page_regex, bc_long)
+                if len(bc_short) > 0:
+                    bc_short = bc_short[0]
+                else:
+                    bc_short = "ERROR"
+            except:
                 bc_short = "ERROR"
-        except:
-            bc_short = "ERROR"
-            log("ERROR", "Failed to grab bc_short out of {bc_long}")
-
-        # scrape whether or not the album is private
-        # BUG: this will flag any artist/album name containing the word
-        #      'PRIVATE' as a private album
-        if 'PRIVATE' in element.text:
-            is_private = 1
+                log("ERROR", "Failed to grab bc_short out of {bc_long}")
         else:
-            is_private = 0
+            bc_short = bc_long
 
         # grab out 'download' href if it exists
         if 'download' in element.text:
@@ -248,7 +253,7 @@ def refresh_db():
 
 def create_db():
     '''Creates a table named ALBUM with the properties
-       artist, album, download, popularity
+       artist, album, popularity, is_private, download_page, bc_long, bc_short
        if it does not already exist'''
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
