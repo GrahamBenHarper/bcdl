@@ -42,7 +42,7 @@ def main():
 
     # for debug messages & limiting number of albums to load
     global DEBUG
-    DEBUG = True
+    DEBUG = False
     global MAX_ALBUMS
     MAX_ALBUMS = 100
     global DEBUG_FILE
@@ -66,8 +66,8 @@ def main():
                         help="Password for signing into Bandcamp")
     parser.add_argument("--update", dest="update", action="store_true",
                         help="Refresh the database of purchased music")
-    parser.add_argument("--search", dest="search", type=str,
-                        help="Search for albums in the database")
+    parser.add_argument("--search", dest="search", type=str, nargs='?',
+                        const='', help="Search for albums in the database")
     parser.add_argument("--dry_run", dest="dry_run", action="store_true",
                         help="Perform a dry run without making any changes")
     parser.add_argument("--db", dest="db", type=str,
@@ -114,7 +114,7 @@ def main():
     if update:
         total_added_to_db = refresh_db()
 
-    if search:
+    if (search is not None):
         download_list = search_db(search)
         print("==> Albums to download (eg: 1 2 3, 1-3)")
         user_input = input("==> ").split()
@@ -148,6 +148,8 @@ def sign_in():
     collection'''
 
     global shared_driver
+    global USER
+    global PASS
     shared_driver = webdriver.Firefox()
     # this URL will automatically bring us to the user's collection
     # after signing in
@@ -419,22 +421,27 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
 # etc. Perhaps this then can return a download_page list() with each index
 # corresponding to the index printed next to each result.
 # Also should probably change name to ie: search_db()
-def search_db(search):
+def search_db(search_string):
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
-    res = cur.execute("SELECT artist_name FROM ALBUM")
-    print(res.fetchall())
 
     download_pages = list()
     print_list = list()
     index = 1
-    search_string = 'SELECT artist_name, album_name, popularity, '
-    search_string += 'is_private, download_page FROM ALBUM ORDER BY popularity DESC'
+    sqlite_query = '''
+        SELECT artist_name, album_name, popularity, is_private, download_page
+        FROM album
+        WHERE artist_name LIKE ? OR album_name LIKE ?
+        ORDER BY popularity DESC
+    '''
 
     download_pages.append(None)  # fix index
 
+    search_iter = ('%' + search_string + '%', '%' + search_string + '%')
+    sqlite_result = cur.execute(sqlite_query, search_iter).fetchall()
+
     for (artist_name, album_name, popularity, is_private,
-         download_page) in cur.execute(search_string):
+         download_page) in sqlite_result:
         download_pages.append(download_page)
         print_list.append(f'{index} - {artist_name} - {album_name} ({popularity})')
         index += 1
@@ -454,7 +461,6 @@ def download_albums(download_pages, zip_directory, music_directory, format):
     dl_url_xpath = "//a[@class='item-button']"
 
     zip_name_regex = r'(?<=filename\*=UTF-8\'\').+?(?=.zip)'
-    #zip_name_regex = '(?<=filename=").+?(?=.zip)'
 
     for download_page in download_pages:
         shared_driver.get(download_page)
@@ -467,6 +473,10 @@ def download_albums(download_pages, zip_directory, music_directory, format):
             download_url = download_element.get_attribute("href")
             sleep(1)
 
+        #TODO: i think what i'd prefer is to go from page to page, building a list
+        # of each download_url, and then quitting shared_driver and downloading
+        # them from the list. *potentially* could even download more than one
+        # at a time and keep track of status independently
         if (not DRY_RUN):
             response = requests.get(download_url)
 
