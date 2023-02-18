@@ -488,6 +488,9 @@ def download_albums(download_pages, zip_directory, music_directory, format):
 
             log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}')
 
+            if not os.path.exists(zip_directory):
+                os.makedirs(zip_directory)
+
             with open(zip_path, 'wb') as zip_file:
                 zip_file.write(response.content)
 
