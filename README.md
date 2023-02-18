@@ -15,9 +15,17 @@ The ultimate goal behind this project is to be able to:
 
 ## Current state
 
-### 2/23/23 Update
+### 2/17/23 Update
 
-The core functionality (downloading) **is still not implemented**, but a large portion of the rewrite (from BeautifulSoup to selenium) is complete. Bandcamp treats "regular," "private," and "fan club" releases all differently, and there are a handful of bugs associated with this problem (ie: I fix "fan club" releases, and suddenly "private" releases break). That said, I would really prefer to (accurately) scrape all of the important data into the database prior to moving on to download functionality. Once the download functionality is working consistently, I think I'll want to hammer away at implementing various search features. And from there, who knows!
+There are some bugs of course, and a lack of error checking in some spots, but overall **the core functionality is complete!** One big feature that's missing is the ability to search or sort the database in any capacity other than what is pre-programmed, which is to print the entire database and sort it by popularity. I intend to tackle this soon, but you may notice that this is a rather large commit, and I'm looking forward to a short break :)
+
+Comments in the code aren't perfect, but there are a handful of relevant `NOTE`, `TODO`, and `BUG` comments that I'll continue tackling until I'm satisfied.
+
+I would consider this release to be something like an extremely early alpha, rather than a bunch of building blocks scattered around.
+
+### 2/14/23 Update
+
+The core functionality (downloading) is still not implemented, but a large portion of the rewrite (from BeautifulSoup to selenium) is complete. Bandcamp treats "regular," "private," and "fan club" releases all differently, and there are a handful of bugs associated with this problem (ie: I fix "fan club" releases, and suddenly "private" releases break). That said, I would really prefer to (accurately) scrape all of the important data into the database prior to moving on to download functionality. Once the download functionality is working consistently, I think I'll want to hammer away at implementing various search features. And from there, who knows!
 
 ## Planned functionality
 

@@ -16,27 +16,126 @@ import re
 # sqlite3
 import sqlite3
 
-# has it been TIMEOUT seconds without a change in the page? then it
-# is loaded.
-TIMEOUT = 10
+# downloading
+import requests
+from zipfile import ZipFile
 
-# how long to wait for the user to sign in, in seconds
-SIGN_IN_TIMEOUT = 15
+# joining paths
+import os
 
-# for debug messages & limiting number of albums to load
-DEBUG = True
-MAX_ALBUMS = 100
+# argument parsing
+import argparse
 
-if (DEBUG):
-    debug_file = open('debug_log', 'a')
-
-DB_LOCATION = "bcdl.db"
-
-shared_driver = webdriver.Firefox()
+DEBUG_FILE = open('debug_log', 'a')
 
 
 def main():
-    refresh_db()
+    # has it been TIMEOUT seconds without a change in the page? then it
+    # is loaded.
+    global TIMEOUT
+    TIMEOUT = 10
+
+    # how long to wait for the user to sign in, in seconds
+    global SIGN_IN_TIMEOUT
+    SIGN_IN_TIMEOUT = 15
+
+    # for debug messages & limiting number of albums to load
+    global DEBUG
+    DEBUG = True
+    global MAX_ALBUMS
+    MAX_ALBUMS = 100
+    global DEBUG_FILE
+
+    global DB_LOCATION
+    DB_LOCATION = "bcdl.db"
+
+    # don't actually save & unzip zip files
+    global DRY_RUN
+    DRY_RUN = False
+
+    global USER
+    USER = None
+    global PASS
+    PASS = None
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--username", dest="username", type=str, required=True,
+                        help="Username for signing into Bandcamp")
+    parser.add_argument("--password", dest="password", type=str, required=True,
+                        help="Password for signing into Bandcamp")
+    parser.add_argument("--update", dest="update", action="store_true",
+                        help="Refresh the database of purchased music")
+    parser.add_argument("--search", dest="search", type=str,
+                        help="Search for albums in the database")
+    parser.add_argument("--dry_run", dest="dry_run", action="store_true",
+                        help="Perform a dry run without making any changes")
+    parser.add_argument("--db", dest="db", type=str,
+                        help="Location of the SQLite database")
+    parser.add_argument("--timeout", dest="timeout", type=int,
+                        help="Timeout for requests in seconds")
+    parser.add_argument("--sign_in_timeout", dest="sign_in_timeout", type=int,
+                        help="Timeout for signing in process in seconds")
+    parser.add_argument("--debug", dest="debug", action="store_true",
+                        help="Turn on debugging output")
+    parser.add_argument("--max_albums", dest="max_albums", type=int,
+                        help="Maximum number of albums to retrieve")
+
+    args = parser.parse_args()
+
+    # TODO: allow user to sign in on their own rather than via args
+    USER = args.username
+    PASS = args.password
+    update = args.update
+    search = args.search
+    dry_run = args.dry_run
+    db = args.db
+    timeout = args.timeout
+    debug = args.debug
+    sign_in_timeout = args.sign_in_timeout
+    max_albums = args.max_albums
+
+    global shared_driver
+
+    if dry_run:
+        DRY_RUN = True
+    if db:
+        DB_LOCATION = db
+    if timeout:
+        TIMEOUT = timeout
+    if sign_in_timeout:
+        SIGN_IN_TIMEOUT = sign_in_timeout
+    if debug:
+        DEBUG = True
+    if max_albums:
+        MAX_ALBUMS = max_albums
+
+    if update:
+        total_added_to_db = refresh_db()
+
+    if search:
+        download_list = search_db(search)
+        print("==> Albums to download (eg: 1 2 3, 1-3)")
+        user_input = input("==> ").split()
+        selected_list = []
+        range_list = []
+        for item in user_input:
+            if "-" in item:
+                range_list.append(item)
+            else:
+                selected_list.append(download_list[int(item)])
+
+        for item in range_list:
+            lower_bound, upper_bound = map(int, item.split("-"))
+            for i in range(lower_bound, upper_bound + 1):
+                selected_list.append(download_list[i])
+
+        download_albums(selected_list, './downloads/', './downloads/', 'flac')
+
+    print(f"A total of {total_added_to_db} albums were added to the database")
+
+    shared_driver.quit()
+    if (DEBUG):
+        DEBUG_FILE.close()
 
 
 def sign_in():
@@ -45,6 +144,8 @@ def sign_in():
     means that the driver is now authenticated and loaded into the user's
     collection'''
 
+    global shared_driver
+    shared_driver = webdriver.Firefox()
     # this URL will automatically bring us to the user's collection
     # after signing in
     shared_driver.get("https://bandcamp.com/login?from=fan_page")
@@ -54,17 +155,12 @@ def sign_in():
     password_field = shared_driver.find_element(by=By.NAME,
                                                 value="password-field")
 
-    # TODO: grab these from either the command line, or allow the user to sign
-    #       in on their own w/ the window
-
-    user = ''
-    pword = ''
     if (DEBUG):
         with open('user_pass', 'r') as login:
-            user = login.readline()
-            pword = login.readline()
-    username_field.send_keys(user)
-    password_field.send_keys(pword)
+            USER = login.readline()
+            PASS = login.readline()
+    username_field.send_keys(USER)
+    password_field.send_keys(PASS)
 
     password_field.send_keys(Keys.RETURN)
 
@@ -172,6 +268,9 @@ def refresh_db():
     artist_xpath = ".//div[@class='collection-item-artist']"
     bc_xpath = ".//a[@class='item-link']"
 
+    return_album_counter = 0
+
+    # NOTE: attempting to parse {len(elements)} releases...
     for element in elements:
         # scrape whether or not the album is private
         # BUG: this will flag any artist/album name containing the word
@@ -235,8 +334,9 @@ def refresh_db():
                                                  value='download')
             # then download_page is converted to a string, containing the link
             download_page = download_page.get_attribute("href")
-            add_to_db(artist_name, album_name, popularity, is_private,
-                      download_page, bc_long, bc_short)
+            if (add_to_db(artist_name, album_name, popularity, is_private,
+                          download_page, bc_long, bc_short)):
+                return_album_counter += 1
         else:
             download_page = "ERROR"
             log("ERROR", f"no download present in {element.text}")
@@ -248,7 +348,9 @@ def refresh_db():
             '----------------------------------------------------------')
 
     shared_driver.quit()
-    return True
+    # NOTE: {len(elements) - return_album_counter} failures,
+    #       {return_album_counter} releases added to db
+    return return_album_counter
 
 
 def create_db():
@@ -284,9 +386,11 @@ def is_dl_page_in_db(download_page):
 def add_to_db(artist_name, album_name, popularity, is_private, download_page,
               bc_long, bc_short):
     '''Adds provided arguments into the database, as long as download_page is
-    not already in the database'''
+    not already in the database. Returns True on success, False on failure'''
     # TODO: can bring con and cur outside of the scope of this function &
     # expose it to the rest of the script, instead of constantly open/close
+    # TODO: maybe add some type of option to check if any of this data has
+    # been updated (ie: popularity or private settings)
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
     data = [artist_name, album_name, popularity, is_private, download_page, bc_long, bc_short]
@@ -309,8 +413,9 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
 # the user wants to search for the string XYZ, or for all albums by a single
 # artist, and wants to limit to X results, sort in ascending/descending order
 # etc. Perhaps this then can return a download_page list() with each index
-# corresponding to the index printed next to each result
-def print_db():
+# corresponding to the index printed next to each result.
+# Also should probably change name to ie: search_db()
+def search_db(search):
     con = sqlite3.connect(DB_LOCATION)
     cur = con.cursor()
     res = cur.execute("SELECT artist_name FROM ALBUM")
@@ -334,6 +439,53 @@ def print_db():
         print(item)
 
     con.close()
+    return download_pages
+
+
+def download_albums(download_pages, zip_directory, music_directory, format):
+    if (not sign_in()):
+        log("ERROR", "failed to sign in!")
+        return False
+
+    dl_url_xpath = "//a[@class='item-button']"
+    zip_name_regex = '(?<=filename=").+?(?=.zip)'
+
+    for download_page in download_pages:
+        shared_driver.get(download_page)
+        shared_driver.implicitly_wait(5)
+        download_url = None
+
+        while (download_url is None):
+            download_element = shared_driver.find_element(by=By.XPATH,
+                                                          value=dl_url_xpath)
+            download_url = download_element.get_attribute("href")
+            sleep(1)
+
+        if (not DRY_RUN):
+            response = requests.get(download_url)
+
+            # BUG: there's something going on where some zips with unicode
+            # are named fine, while otherse are a garbled mess. need to dig
+            # into it more
+            zip_name_pre_regex = response.headers.get("Content-Disposition")
+            zip_name = re.findall(zip_name_regex, zip_name_pre_regex)[0]
+            zip_name += ".zip"
+            zip_path = os.path.join(zip_directory, zip_name)
+
+            log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}')
+
+            with open(zip_path, 'wb') as zip_file:
+                zip_file.write(response.content)
+
+            with ZipFile(zip_path, 'r') as zip_object:
+                # TODO: need more granular control over unzip directory,
+                # ie: {music_directory}/artist/album rather than just unzipping
+                # it to {music_directory}/Artist - Album
+                unzip_path = os.path.join(music_directory, zip_name[:-4])
+                log("TESTING", f'downloaded {download_url} to {zip_path};'
+                               f' attempting to unzip into {unzip_path}')
+
+                zip_object.extractall(path=unzip_path)
 
 
 def log(type, message):
@@ -341,12 +493,8 @@ def log(type, message):
     message = str(type) + ': ' + str(message)
     if (DEBUG):
         print(message)
-        debug_file.write(message + '\n')
+        DEBUG_FILE.write(message + '\n')
 
 
 if __name__ == "__main__":
     main()
-    print_db()
-    shared_driver.quit()
-    if (DEBUG):
-        debug_file.close()
