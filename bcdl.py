@@ -26,18 +26,19 @@ import os
 # argument parsing
 import argparse
 
-DEBUG_FILE = open('debug_log', 'a')
+# parsing out filenames from the header correctly
+import urllib.parse
 
 
 def main():
-    # has it been TIMEOUT seconds without a change in the page? then it
-    # is loaded.
-    global TIMEOUT
-    TIMEOUT = 10
+    # has it been PAGE_LOAD_TIMEOUT seconds without a change in the page? then
+    # it is loaded.
+    global PAGE_LOAD_TIMEOUT
+    PAGE_LOAD_TIMEOUT = 10
 
     # how long to wait for the user to sign in, in seconds
-    global SIGN_IN_TIMEOUT
-    SIGN_IN_TIMEOUT = 15
+    global SIGN_IN_WAIT_TIME
+    SIGN_IN_WAIT_TIME = 15
 
     # for debug messages & limiting number of albums to load
     global DEBUG
@@ -72,9 +73,9 @@ def main():
     parser.add_argument("--db", dest="db", type=str,
                         help="Location of the SQLite database")
     parser.add_argument("--timeout", dest="timeout", type=int,
-                        help="Timeout for requests in seconds")
-    parser.add_argument("--sign_in_timeout", dest="sign_in_timeout", type=int,
-                        help="Timeout for signing in process in seconds")
+                        help="Timeout between db update checks (see docs)")
+    parser.add_argument("--sign_in_wait_time", dest="sign_in_wait_time", type=int,
+                        help="Wait time for sign in process in seconds")
     parser.add_argument("--debug", dest="debug", action="store_true",
                         help="Turn on debugging output")
     parser.add_argument("--max_albums", dest="max_albums", type=int,
@@ -91,7 +92,7 @@ def main():
     db = args.db
     timeout = args.timeout
     debug = args.debug
-    sign_in_timeout = args.sign_in_timeout
+    sign_in_wait_time = args.sign_in_wait_time
     max_albums = args.max_albums
 
     global shared_driver
@@ -101,11 +102,12 @@ def main():
     if db:
         DB_LOCATION = db
     if timeout:
-        TIMEOUT = timeout
-    if sign_in_timeout:
-        SIGN_IN_TIMEOUT = sign_in_timeout
+        PAGE_LOAD_TIMEOUT = timeout
+    if sign_in_wait_time:
+        SIGN_IN_WAIT_TIME = sign_in_wait_time
     if debug:
         DEBUG = True
+        DEBUG_FILE = open('debug_log', 'a')
     if max_albums:
         MAX_ALBUMS = max_albums
 
@@ -131,7 +133,8 @@ def main():
 
         download_albums(selected_list, './downloads/', './downloads/', 'flac')
 
-    print(f"A total of {total_added_to_db} albums were added to the database")
+    if update:
+        print(f"A total of {total_added_to_db} albums were added to the database")
 
     shared_driver.quit()
     if (DEBUG):
@@ -181,10 +184,10 @@ def sign_in():
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
-            if (time_waited >= SIGN_IN_TIMEOUT):
+            if (time_waited >= SIGN_IN_WAIT_TIME):
                 return False
             log("INFO", f"No luck, have waited {time_waited} seconds; waiting "
-                f"another 5 seconds (max timeout {SIGN_IN_TIMEOUT})")
+                f"another 5 seconds (max wait {SIGN_IN_WAIT_TIME})")
             time_waited += 5
             sleep(5)
         except ElementNotInteractableException:
@@ -227,6 +230,7 @@ def refresh_db():
     # search for <li> blocks with an id that starts with ...
     xpath = "//li[contains(@id, 'collection-item-container_')]"
 
+    global PAGE_LOAD_TIMEOUT
     while (True):
         elements = shared_driver.find_elements(by=By.XPATH, value=xpath)
         current_album_count = len(elements)
@@ -248,7 +252,7 @@ def refresh_db():
         seconds_counter += 1
         sleep(1)
 
-        if seconds_counter > TIMEOUT:
+        if seconds_counter > PAGE_LOAD_TIMEOUT:
             log('INFO', 'resetting seconds_counter; previous/current: ' +
                 f'{previous_album_count}/{current_album_count}')
 
@@ -448,7 +452,9 @@ def download_albums(download_pages, zip_directory, music_directory, format):
         return False
 
     dl_url_xpath = "//a[@class='item-button']"
-    zip_name_regex = '(?<=filename=").+?(?=.zip)'
+
+    zip_name_regex = r'(?<=filename\*=UTF-8\'\').+?(?=.zip)'
+    #zip_name_regex = '(?<=filename=").+?(?=.zip)'
 
     for download_page in download_pages:
         shared_driver.get(download_page)
@@ -464,11 +470,9 @@ def download_albums(download_pages, zip_directory, music_directory, format):
         if (not DRY_RUN):
             response = requests.get(download_url)
 
-            # BUG: there's something going on where some zips with unicode
-            # are named fine, while otherse are a garbled mess. need to dig
-            # into it more
             zip_name_pre_regex = response.headers.get("Content-Disposition")
             zip_name = re.findall(zip_name_regex, zip_name_pre_regex)[0]
+            zip_name = urllib.parse.unquote(zip_name)
             zip_name += ".zip"
             zip_path = os.path.join(zip_directory, zip_name)
 
@@ -490,6 +494,7 @@ def download_albums(download_pages, zip_directory, music_directory, format):
 
 def log(type, message):
     '''Print and record a debug message'''
+    global DEBUG_FILE
     message = str(type) + ': ' + str(message)
     if (DEBUG):
         print(message)
