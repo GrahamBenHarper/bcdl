@@ -1,63 +1,91 @@
-# all the selenium goodies
+# selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
-
-# selenium exceptions
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
 
 from time import sleep
 
-# regex
+# regex & sqlite
 import re
-
-# sqlite3
 import sqlite3
 
-# downloading
+# downloading & file handling
 import requests
 from zipfile import ZipFile
-
-# joining paths
 import os
 
-# argument parsing
+# argument & string parsing
 import argparse
-
-# parsing out filenames from the header correctly
 import urllib.parse
 
 
 def main():
+    GLOBALS = set_global_vars()
+
+    if GLOBALS['update']:
+        shared_driver = init_driver()
+        total_added_to_db = refresh_db(shared_driver, GLOBALS)
+
+    if (GLOBALS['search'] is not None):
+        download_list = search_db(GLOBALS['search'], GLOBALS)
+        print("==> Albums to download (eg: 1 2 3, 1-3)")
+        user_input = input("==> ").split()
+        selected_list = []
+        range_list = []
+        for item in user_input:
+            if "-" in item:
+                range_list.append(item)
+            else:
+                selected_list.append(download_list[int(item)])
+
+        for item in range_list:
+            lower_bound, upper_bound = map(int, item.split("-"))
+            for i in range(lower_bound, upper_bound + 1):
+                selected_list.append(download_list[i])
+
+        shared_driver = init_driver()
+        download_albums(selected_list, './downloads/', './downloads/', 'flac', shared_driver, GLOBALS)
+
+    if (GLOBALS['update']):
+        print(f"A total of {total_added_to_db} albums were added to the database")
+
+    if (GLOBALS['DEBUG']):
+        GLOBALS['DEBUG_FILE'].close()
+
+
+def set_global_vars():
+    # default values for global variables & a brief explanation of each
+    GLOBALS = {}
+
     # has it been PAGE_LOAD_TIMEOUT seconds without a change in the page? then
     # it is loaded.
-    global PAGE_LOAD_TIMEOUT
-    PAGE_LOAD_TIMEOUT = 10
+    GLOBALS['PAGE_LOAD_TIMEOUT'] = 10
 
     # how long to wait for the user to sign in, in seconds
-    global SIGN_IN_WAIT_TIME
-    SIGN_IN_WAIT_TIME = 15
+    GLOBALS['SIGN_IN_WAIT_TIME'] = 15
 
     # for debug messages & limiting number of albums to load
-    global DEBUG
-    DEBUG = False
-    global MAX_ALBUMS
-    MAX_ALBUMS = 100
-    global DEBUG_FILE
+    GLOBALS['DEBUG'] = False
+    GLOBALS['MAX_ALBUMS'] = 100
+    # TODO: DEBUG_FILE is an object that shouldn't be inside of the GLOBAL
+    # dictionary. perhaps i could make it a string instead and have the
+    # log() function open the file on each write? something like that
+    GLOBALS['DEBUG_FILE'] = None
 
-    global DB_LOCATION
-    DB_LOCATION = "bcdl.db"
+    GLOBALS['DB_LOCATION'] = "bcdl.db"
 
-    # don't actually save & unzip zip files
-    global DRY_RUN
-    DRY_RUN = False
+    # don't actually save & unzip albums
+    GLOBALS['DRY_RUN'] = False
 
-    global USER
-    USER = None
-    global PASS
-    PASS = None
+    GLOBALS['USER'] = None
+    GLOBALS['PASS'] = None
+
+    # action to perform on this run, update db or search db? or both
+    GLOBALS['update'] = False
+    GLOBALS['search'] = None
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", dest="username", type=str, required=True,
@@ -74,7 +102,8 @@ def main():
                         help="Location of the SQLite database")
     parser.add_argument("--timeout", dest="timeout", type=int,
                         help="Timeout between db update checks (see docs)")
-    parser.add_argument("--sign_in_wait_time", dest="sign_in_wait_time", type=int,
+    parser.add_argument("--sign_in_wait_time", dest="sign_in_wait_time",
+                        type=int,
                         help="Wait time for sign in process in seconds")
     parser.add_argument("--debug", dest="debug", action="store_true",
                         help="Turn on debugging output")
@@ -84,8 +113,8 @@ def main():
     args = parser.parse_args()
 
     # TODO: allow user to sign in on their own rather than via args
-    USER = args.username
-    PASS = args.password
+    GLOBALS['USER'] = args.username
+    GLOBALS['PASS'] = args.password
     update = args.update
     search = args.search
     dry_run = args.dry_run
@@ -95,62 +124,38 @@ def main():
     sign_in_wait_time = args.sign_in_wait_time
     max_albums = args.max_albums
 
-    global shared_driver
-
     if dry_run:
-        DRY_RUN = True
+        GLOBALS['DRY_RUN'] = True
     if db:
-        DB_LOCATION = db
+        GLOBALS['DB_LOCATION'] = db
     if timeout:
-        PAGE_LOAD_TIMEOUT = timeout
+        GLOBALS['PAGE_LOAD_TIMEOUT'] = timeout
     if sign_in_wait_time:
-        SIGN_IN_WAIT_TIME = sign_in_wait_time
+        GLOBALS['SIGN_IN_WAIT_TIME'] = sign_in_wait_time
     if debug:
-        DEBUG = True
-        DEBUG_FILE = open('debug_log', 'a')
+        GLOBALS['DEBUG'] = True
+        GLOBALS['DEBUG_FILE'] = open('debug_log', 'a')
     if max_albums:
-        MAX_ALBUMS = max_albums
-
+        GLOBALS['MAX_ALBUMS'] = max_albums
     if update:
-        total_added_to_db = refresh_db()
+        GLOBALS['update'] = update
+    if search is not None:
+        GLOBALS['search'] = search
 
-    if (search is not None):
-        download_list = search_db(search)
-        print("==> Albums to download (eg: 1 2 3, 1-3)")
-        user_input = input("==> ").split()
-        selected_list = []
-        range_list = []
-        for item in user_input:
-            if "-" in item:
-                range_list.append(item)
-            else:
-                selected_list.append(download_list[int(item)])
-
-        for item in range_list:
-            lower_bound, upper_bound = map(int, item.split("-"))
-            for i in range(lower_bound, upper_bound + 1):
-                selected_list.append(download_list[i])
-
-        download_albums(selected_list, './downloads/', './downloads/', 'flac')
-
-    if update:
-        print(f"A total of {total_added_to_db} albums were added to the database")
-
-    shared_driver.quit()
-    if (DEBUG):
-        DEBUG_FILE.close()
+    return GLOBALS
 
 
-def sign_in():
+def init_driver():
+    shared_driver = webdriver.Firefox()
+    return shared_driver
+
+
+def sign_in(shared_driver, GLOBALS):
     '''Will attempt to sign the user into their bandcamp account, load up
     their collection, and click 'show more.' If sign_in() returns True, that
     means that the driver is now authenticated and loaded into the user's
     collection'''
 
-    global shared_driver
-    global USER
-    global PASS
-    shared_driver = webdriver.Firefox()
     # this URL will automatically bring us to the user's collection
     # after signing in
     shared_driver.get("https://bandcamp.com/login?from=fan_page")
@@ -160,12 +165,12 @@ def sign_in():
     password_field = shared_driver.find_element(by=By.NAME,
                                                 value="password-field")
 
-    if (DEBUG):
+    if (GLOBALS['DEBUG']):
         with open('user_pass', 'r') as login:
-            USER = login.readline()
-            PASS = login.readline()
-    username_field.send_keys(USER)
-    password_field.send_keys(PASS)
+            GLOBALS['USER'] = login.readline()
+            GLOBALS['PASS'] = login.readline()
+    username_field.send_keys(GLOBALS['USER'])
+    password_field.send_keys(GLOBALS['PASS'])
 
     password_field.send_keys(Keys.RETURN)
 
@@ -186,10 +191,11 @@ def sign_in():
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
-            if (time_waited >= SIGN_IN_WAIT_TIME):
+            if (time_waited >= GLOBALS['SIGN_IN_WAIT_TIME']):
                 return False
             log("INFO", f"No luck, have waited {time_waited} seconds; waiting "
-                f"another 5 seconds (max wait {SIGN_IN_WAIT_TIME})")
+                f"another 5 seconds (max wait {GLOBALS['SIGN_IN_WAIT_TIME']})",
+                GLOBALS)
             time_waited += 5
             sleep(5)
         except ElementNotInteractableException:
@@ -201,13 +207,14 @@ def sign_in():
             # means that the additional elements have been loaded, therefore
             # we no longer need to click and we can just continue on as if
             # nothing happened
-            log("INFO", "Failure with button clicking but i -think- we can continue..")
+            log("INFO", "Failure with button clicking but i -think- we can continue.."
+                , GLOBALS)
 
     # if we made out out of the loop, then we're signed in
     return True
 
 
-def refresh_db():
+def refresh_db(shared_driver, GLOBALS):
     # TODO: maybe could return -1 on failure, and numbers of albums added on
     #       success
     '''Will call sign_in() and add any new albums into the database.
@@ -216,9 +223,9 @@ def refresh_db():
     # (ie: if you only purchased 5 new albums since the last refresh, there's
     # probably no need to go through all 2000 albums owned)
 
-    create_db()
-    if (not sign_in()):
-        log("ERROR", "failed to sign in!")
+    create_db(GLOBALS)
+    if (not sign_in(shared_driver, GLOBALS)):
+        log("ERROR", "failed to sign in!", GLOBALS)
         return False
 
     # scroll down once every second until the page is fully loaded in.
@@ -232,14 +239,13 @@ def refresh_db():
     # search for <li> blocks with an id that starts with ...
     xpath = "//li[contains(@id, 'collection-item-container_')]"
 
-    global PAGE_LOAD_TIMEOUT
     while (True):
         elements = shared_driver.find_elements(by=By.XPATH, value=xpath)
         current_album_count = len(elements)
 
         if (previous_album_count == current_album_count):
             break
-        elif (current_album_count > MAX_ALBUMS):
+        elif (current_album_count > GLOBALS['MAX_ALBUMS']):
             break
 
         # TODO: i believe the number of keypresses needed is going to change
@@ -254,9 +260,9 @@ def refresh_db():
         seconds_counter += 1
         sleep(1)
 
-        if seconds_counter > PAGE_LOAD_TIMEOUT:
+        if seconds_counter > GLOBALS['PAGE_LOAD_TIMEOUT']:
             log('INFO', 'resetting seconds_counter; previous/current: ' +
-                f'{previous_album_count}/{current_album_count}')
+                f'{previous_album_count}/{current_album_count}', GLOBALS)
 
             previous_album_count = current_album_count
             seconds_counter = 0
@@ -329,7 +335,7 @@ def refresh_db():
                     bc_short = "ERROR"
             except:
                 bc_short = "ERROR"
-                log("ERROR", "Failed to grab bc_short out of {bc_long}")
+                log("ERROR", "Failed to grab bc_short out of {bc_long}", GLOBALS)
         else:
             bc_short = bc_long
 
@@ -341,17 +347,18 @@ def refresh_db():
             # then download_page is converted to a string, containing the link
             download_page = download_page.get_attribute("href")
             if (add_to_db(artist_name, album_name, popularity, is_private,
-                          download_page, bc_long, bc_short)):
+                          download_page, bc_long, bc_short, GLOBALS)):
                 return_album_counter += 1
         else:
             download_page = "ERROR"
-            log("ERROR", f"no download present in {element.text}")
+            log("ERROR", f"no download present in {element.text}", GLOBALS)
 
         log('INFO', f'artist: {artist_name}, album name: {album_name}, '
             f'private: {is_private}, popularity: {popularity} '
             f'bc link & short: {bc_long} & {bc_short} '
             f' download: {download_page}\n'
-            '----------------------------------------------------------')
+            '----------------------------------------------------------',
+            GLOBALS)
 
     shared_driver.quit()
     # NOTE: {len(elements) - return_album_counter} failures,
@@ -359,58 +366,58 @@ def refresh_db():
     return return_album_counter
 
 
-def create_db():
+def create_db(GLOBALS):
     '''Creates a table named ALBUM with the properties
        artist, album, popularity, is_private, download_page, bc_long, bc_short
        if it does not already exist'''
-    con = sqlite3.connect(DB_LOCATION)
+    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
     cur = con.cursor()
     res = cur.execute("SELECT name FROM sqlite_master")
     if (not res.fetchone()):
-        log("INFO", "making db")
+        log("INFO", "making db", GLOBALS)
         run_string = "CREATE TABLE ALBUM(artist_name TEXT, album_name TEXT, "
         run_string += "popularity INTEGER, is_private INTEGER, "
         run_string += "download_page TEXT, bc_long TEXT, bc_short TEXT)"
         cur.execute(run_string)
 
 
-def is_dl_page_in_db(download_page):
+def is_dl_page_in_db(download_page, GLOBALS):
     '''Returns True if the provided download_page is already in the database,
     otherwise false'''
-    con = sqlite3.connect(DB_LOCATION)
+    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
     cur = con.cursor()
     res = cur.execute(f"SELECT download_page FROM ALBUM WHERE download_page='{download_page}'")
     if (not res.fetchall()):
-        log('INFO', f'{download_page} was not in db, returning False')
+        log('INFO', f'{download_page} was not in db, returning False', GLOBALS)
         con.close()
         return False
-    log('INFO', f'{download_page} was in db, returning True')
+    log('INFO', f'{download_page} was in db, returning True', GLOBALS)
     con.close()
     return True
 
 
 def add_to_db(artist_name, album_name, popularity, is_private, download_page,
-              bc_long, bc_short):
+              bc_long, bc_short, GLOBALS):
     '''Adds provided arguments into the database, as long as download_page is
     not already in the database. Returns True on success, False on failure'''
     # TODO: can bring con and cur outside of the scope of this function &
     # expose it to the rest of the script, instead of constantly open/close
     # TODO: maybe add some type of option to check if any of this data has
     # been updated (ie: popularity or private settings)
-    con = sqlite3.connect(DB_LOCATION)
+    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
     cur = con.cursor()
     data = [artist_name, album_name, popularity, is_private, download_page, bc_long, bc_short]
-    if (not is_dl_page_in_db(download_page)):
+    if (not is_dl_page_in_db(download_page, GLOBALS)):
         cur.execute("INSERT INTO ALBUM VALUES(?, ?, ?, ?, ?, ?, ?)", data)
         con.commit()
         con.close()
-        log('INFO', f'{album_name} added to db')
+        log('INFO', f'{album_name} added to db', GLOBALS)
         return True
     else:
-        log('INFO', f'{album_name} failed to add to db; probably already in there')
+        log('INFO', f'{album_name} failed to add to db; probably already in there', GLOBALS)
         con.close()
         return False
-    log('ERROR, 'f'something went wrong while adding {album_name}!!!')
+    log('ERROR, 'f'something went wrong while adding {album_name}!!!', GLOBALS)
     con.close()
     return False
 
@@ -421,8 +428,8 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
 # etc. Perhaps this then can return a download_page list() with each index
 # corresponding to the index printed next to each result.
 # Also should probably change name to ie: search_db()
-def search_db(search_string):
-    con = sqlite3.connect(DB_LOCATION)
+def search_db(search_string, GLOBALS):
+    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
     cur = con.cursor()
 
     download_pages = list()
@@ -453,9 +460,9 @@ def search_db(search_string):
     return download_pages
 
 
-def download_albums(download_pages, zip_directory, music_directory, format):
-    if (not sign_in()):
-        log("ERROR", "failed to sign in!")
+def download_albums(download_pages, zip_directory, music_directory, format, shared_driver, GLOBALS):
+    if (not sign_in(shared_driver, GLOBALS)):
+        log("ERROR", "failed to sign in!", GLOBALS)
         return False
 
     dl_url_xpath = "//a[@class='item-button']"
@@ -486,7 +493,7 @@ def download_albums(download_pages, zip_directory, music_directory, format):
             zip_name += ".zip"
             zip_path = os.path.join(zip_directory, zip_name)
 
-            log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}')
+            log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}', GLOBALS)
 
             if not os.path.exists(zip_directory):
                 os.makedirs(zip_directory)
@@ -500,18 +507,20 @@ def download_albums(download_pages, zip_directory, music_directory, format):
                 # it to {music_directory}/Artist - Album
                 unzip_path = os.path.join(music_directory, zip_name[:-4])
                 log("TESTING", f'downloaded {download_url} to {zip_path};'
-                               f' attempting to unzip into {unzip_path}')
+                               f' attempting to unzip into {unzip_path}'
+                               , GLOBALS)
 
                 zip_object.extractall(path=unzip_path)
 
+    shared_driver.quit()
 
-def log(type, message):
+
+def log(type, message, GLOBALS):
     '''Print and record a debug message'''
-    global DEBUG_FILE
     message = str(type) + ': ' + str(message)
-    if (DEBUG):
+    if (GLOBALS['DEBUG']):
         print(message)
-        DEBUG_FILE.write(message + '\n')
+        GLOBALS['DEBUG_FILE'].write(message + '\n')
 
 
 if __name__ == "__main__":

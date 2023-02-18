@@ -2,7 +2,7 @@
 
 My first project here on github!
 
-**bcdl** is a project that automates the process of downloading albums from bandcamp. It utilizes selenium to sign into a user's account, create or update a local sqlite3 database of their releases, and then allows the user to search and download their selected albums. The downloaded albums are unzipped and stored in the ./downloads directory. Currently, the project is in its alpha stage and provides basic functionality, but deeper search and download control is planned for future updates.
+**bcdl** is a project that automates the process of downloading albums from bandcamp. **bcdl** utilizes selenium to sign into a user's account, can create or update a local sqlite3 database of their releases, and then allows the user to search their database and download their selected albums. The downloaded albums are unzipped and stored in the ./downloads directory. Currently, the project is in its alpha stage and provides basic functionality, but deeper search and download control is planned for future updates.
 
 ## Quick start
 
