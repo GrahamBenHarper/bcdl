@@ -1,36 +1,99 @@
-# bcdl.py
+# bcdl.py - Automated Bandcamp Album Downloader
 
 My first project here on github!
 
-In addition to automating album downloading from bandcamp, this project has also been an excuse for me to learn and utilize sqlite3, regex, and BeautifulSoup. Bandcamp recently broke the functionality of this script, so now it's also an excuse to learn selenium :)
+**bcdl** is a project that automates the process of downloading albums from bandcamp. It utilizes selenium to sign into a user's account, create or update a local sqlite3 database of their releases, and then allows the user to search and download their selected albums. The downloaded albums are unzipped and stored in the ./downloads directory. Currently, the project is in its alpha stage and provides basic functionality, but deeper search and download control is planned for future updates.
 
-## Goals
+## Quick start
 
-The ultimate goal behind this project is to be able to:
+Build your local database (assuming that you own 500 or less releases):
 
-1. Sign into bandcamp
-2. Build a local database of all music owned, including subscription-gated releases
-3. Search through this database and select one or multiple albums
-4. Download and unzip these releases in the desired format
+`python bcdl.py --user email@here.com --password pass123word --update --max_albums 500`
 
-## Current state
+Search your local database for the word 'haircuts':
 
-### 2/17/23 Update
+`python bcdl.py --user email@here.com --password pass123word --search haircuts`
 
-There are some bugs of course, and a lack of error checking in some spots, but overall **the core functionality is complete!** One big feature that's missing is the ability to search or sort the database in any capacity other than what is pre-programmed, which is to print the entire database and sort it by popularity. I intend to tackle this soon, but you may notice that this is a rather large commit, and I'm looking forward to a short break :)
+Or, display your entire local database:
 
-Comments in the code aren't perfect, but there are a handful of relevant `NOTE`, `TODO`, and `BUG` comments that I'll continue tackling until I'm satisfied.
+`python bcdl.py --user email@here.com --password pass123word --search`
 
-I would consider this release to be something like an extremely early alpha, rather than a bunch of building blocks scattered around.
+## What does it do?
 
-### 2/14/23 Update
+The script builds a local sqlite3 database of the user's releases by signing into the user's account via an automated selenium window. It can either build a full database from scratch, or simply read the newest `MAX_ALBUMS` releases.
 
-The core functionality (downloading) is still not implemented, but a large portion of the rewrite (from BeautifulSoup to selenium) is complete. Bandcamp treats "regular," "private," and "fan club" releases all differently, and there are a handful of bugs associated with this problem (ie: I fix "fan club" releases, and suddenly "private" releases break). That said, I would really prefer to (accurately) scrape all of the important data into the database prior to moving on to download functionality. Once the download functionality is working consistently, I think I'll want to hammer away at implementing various search features. And from there, who knows!
+It can search through that database locally, allowing the user to specify a search string, or no search string to simply view the entire database. The user can select which releases to download via a *pacman-like* interface.
 
-## Planned functionality
+After selecting which releases to download, **bcdl** will sign into the user's account and download each release, one by one, and unzip them approximately as follows:
 
-I believe that the script should take command-line arguments for `username`, `password`, `MAX_ALBUMS`, `TIMEOUT`, `audio_format` and should have some way specify that the user is looking to search through an existing database rather than rebuilding the database. Perhaps default behavior is to build or update the locally-stored database.
+`./downloads/Artist - Album.zip`
 
-Searching will ideally allow for some advanced options, but for now I think the simplest is a broad string match on artist/album either sorted alphabetically or by 'popularity' (number of people who own the album). I would also like it to work similarly to Arch's pacman.
+With the songs being unzipped as:
 
-Download pages will be stored in the database, but (due to some bandcamp changes) will still require the user to be signed in.
+`./downloads/Artist - Album/Artist - Album - ## Song Title.flac`
+
+Note that selecting an audio format is currently not implemented, and seems to default to however you normally download albums from bandcamp.
+
+## How do I use it?
+
+### Signing in
+
+First, you'll need to specify a username/password for either database building/updating or for release downloading. Currently, you can either:
+
+`python bcdl.py --user email@here.com --password pass123word`
+
+or, you may create a file named `user_pass` in the same directory, containing the email on the first line, password on the second, and nothing else in the file:
+
+*./user_pass*
+
+first line: `email@here.com`
+
+second line: `pass123word`
+
+Next, you'll need to pass the `--debug` flag, *and* you'll still need to provide a username/password, but they will be ignored by **bcdl**:
+
+`python bcdl.py --debug --user gibberish --password gibberish`
+
+You may also intentionally enter an incorrect username/password, and simply sign in on your own once the selenium window pops up. You will have `SIGN_IN_WAIT_TIME` seconds to do so, which is 15 seconds by default, but this can be changed via the argument `--sign_in_wait_time`. For example, the following command allows you 60 seconds to sign in manually:
+
+`python bcdl.py --user gibberish --password gibberish --sign_in_wait_time 60`
+
+(in the above example, the login will fail, and you'll have 60 seconds to type in your username/password yourself)
+
+Also of note is that, no matter which way you choose to sign in, you may have to solve a captcha. The point of the `SIGN_IN_WAIT_TIME` variable is to allow time to complete the captcha.
+
+### Database building/updating
+
+Currently, **bcdl** will crash if all you do is attempt to sign in but you don't pass any other arguments. You must provide either the `--update` or `--search` flag. We'll talk about `--update` first:
+
+`--update` takes no arguments, and all it does is attempt to sign in, and build/update a database up to the first `MAX_ALBUMS` albums. The default value for `MAX_ALBUMS` is 100. The name of this variable is a little misleading; it will actually grab *at least* `MAX_ALBUMS` albums, rather than a *maximum* of `MAX_ALBUMS` albums. The `MAX_ALBUMS` may be changed via the `--max_albums` argument.
+
+Let's say you have a total of 1234 releases in your bandcamp account and you would like to build a local database containing all of these releases. You would use a command similar to this:
+
+`python bcdl.py --user email@here.com --password pass123word --update --max_albums 1300`
+
+Let's say a month has passed since you've last updated your local database, and you've since purchased a staggering 150 new albums. Rather than scanning your entire bandcamp collection again, a command like this can be utilized instead:
+
+`python bcdl.py --user email@here.com --password pass123word --update --max_albums 200`
+
+### Searching/downloading
+
+To search the local database of releases, you can use the `--search` flag followed by a keyword or phrase:
+
+`python bcdl.py --user email@here.com --password pass123word --search haircuts`
+
+This search will return all releases where the artist or album name contains the word "haircuts". The results are sorted by popularity, with the most popular release appearing first. Deeper search functionality is planned but not yet implemented.
+
+Once you have the search results, you can select which releases to download. You can specify a range of releases or individual releases to download. For example, to download releases 1, 2, 3, 4, 5, 10, 12, 15, 16, and 17, you can enter the following:
+
+`1-5 12 15-17 10`
+
+The script will then navigate to each download page, download each selected release, and unzip them into the `./downloads` directory. More granular control over the download process is planned but not yet implemented.
+
+If you want to view the entire database, you can run the `--search` flag without a keyword or phrase:
+
+`python bcdl.py --user email@here.com --password pass123word --search`
+
+## Todo
+
+In addition to some planned functionality above, there is a general todo list in `TODO.md`, as well as throughout the code in `bcdl.py` by searching for the words `TODO`, `BUG`, or `NOTE`.
