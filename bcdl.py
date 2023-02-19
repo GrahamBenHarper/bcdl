@@ -275,9 +275,8 @@ def refresh_db(shared_driver, GLOBALS):
     # NOTE: attempting to parse {len(elements)} releases...
     for element in elements:
         # scrape whether or not the album is private
-        # BUG: this will flag any artist/album name containing the word
-        #      'PRIVATE' as a private album
-        if 'PRIVATE' in element.text:
+        element_text = element.text.split('\n')
+        if element_text[2] == 'PRIVATE':
             is_private = 1
         else:
             is_private = 0
@@ -483,7 +482,6 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
             zip_name += '.zip'
             zip_path = os.path.join(zip_directory, zip_name)
 
-            #log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}', GLOBALS)
             print(f'Downloaded {zip_name}; unzipping...')
 
             if not os.path.exists(zip_directory):
