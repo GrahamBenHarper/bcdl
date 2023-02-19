@@ -28,6 +28,9 @@ def main():
     if GLOBALS['update']:
         shared_driver = init_driver()
         total_added_to_db = refresh_db(shared_driver, GLOBALS)
+        if (total_added_to_db == -1):
+            print("Unable to update database! Exiting...")
+            exit(1)
 
     if (GLOBALS['search'] is not None):
         download_list = search_db(GLOBALS['search'], GLOBALS)
@@ -186,8 +189,6 @@ def sign_in(shared_driver, GLOBALS):
             show_more_button = shared_driver.find_element(by=By.CLASS_NAME,
                                                           value="show-more")
             loaded = True
-            # TODO: need to verify button clicking try/except stuffs is good
-            # 2/11 update: tbh it's hacky but probably fine to call it done
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
@@ -199,24 +200,13 @@ def sign_in(shared_driver, GLOBALS):
             time_waited += 5
             sleep(5)
         except ElementNotInteractableException:
-            # explanation: generally we need 2 button clicks to load the
-            # additional elements. however, it seems that sometimes a single
-            # click is enough. if we hit this exception, it means that
-            # the webdriver was able to find the element, however after 0 or 1
-            # clicks, it is no longer able to find it anymore. this -probably-
-            # means that the additional elements have been loaded, therefore
-            # we no longer need to click and we can just continue on as if
-            # nothing happened
-            log("INFO", "Failure with button clicking but i -think- we can continue.."
-                , GLOBALS)
+            log("INFO", "Failure with button clicking, continuing...", GLOBALS)
 
     # if we made out out of the loop, then we're signed in
     return True
 
 
 def refresh_db(shared_driver, GLOBALS):
-    # TODO: maybe could return -1 on failure, and numbers of albums added on
-    #       success
     '''Will call sign_in() and add any new albums into the database.
     Will stop after MAX_ALBUMS albums. Returns boolean depending on
     success'''
@@ -226,7 +216,7 @@ def refresh_db(shared_driver, GLOBALS):
     create_db(GLOBALS)
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
-        return False
+        return -1
 
     # scroll down once every second until the page is fully loaded in.
     # once the page is loaded in, the 'elements' variable will contain
@@ -422,12 +412,6 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
     return False
 
 
-# TODO: this function should be updated to take some sort of input. Let's say
-# the user wants to search for the string XYZ, or for all albums by a single
-# artist, and wants to limit to X results, sort in ascending/descending order
-# etc. Perhaps this then can return a download_page list() with each index
-# corresponding to the index printed next to each result.
-# Also should probably change name to ie: search_db()
 def search_db(search_string, GLOBALS):
     con = sqlite3.connect(GLOBALS['DB_LOCATION'])
     cur = con.cursor()
@@ -469,6 +453,8 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
 
     zip_name_regex = r'(?<=filename\*=UTF-8\'\').+?(?=.zip)'
 
+    download_urls = []
+
     for download_page in download_pages:
         shared_driver.get(download_page)
         shared_driver.implicitly_wait(5)
@@ -480,20 +466,25 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
             download_url = download_element.get_attribute("href")
             sleep(1)
 
-        #TODO: i think what i'd prefer is to go from page to page, building a list
-        # of each download_url, and then quitting shared_driver and downloading
-        # them from the list. *potentially* could even download more than one
-        # at a time and keep track of status independently
-        if (not DRY_RUN):
+        download_urls.append(download_url)
+
+    shared_driver.quit()
+    download_counter = 0
+
+    for download_url in download_urls:
+        download_counter += 1
+        print(f'Downloading #{download_counter} of {len(download_urls)}...')
+        if (not GLOBALS['DRY_RUN']):
             response = requests.get(download_url)
 
             zip_name_pre_regex = response.headers.get("Content-Disposition")
             zip_name = re.findall(zip_name_regex, zip_name_pre_regex)[0]
             zip_name = urllib.parse.unquote(zip_name)
-            zip_name += ".zip"
+            zip_name += '.zip'
             zip_path = os.path.join(zip_directory, zip_name)
 
-            log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}', GLOBALS)
+            #log("INFO", f'naming zip... {zip_name_pre_regex} -- {zip_name}', GLOBALS)
+            print(f'Downloaded {zip_name}; unzipping...')
 
             if not os.path.exists(zip_directory):
                 os.makedirs(zip_directory)
@@ -507,12 +498,11 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
                 # it to {music_directory}/Artist - Album
                 unzip_path = os.path.join(music_directory, zip_name[:-4])
                 log("TESTING", f'downloaded {download_url} to {zip_path};'
-                               f' attempting to unzip into {unzip_path}'
-                               , GLOBALS)
+                               f' attempting to unzip into {unzip_path}',
+                               GLOBALS)
 
                 zip_object.extractall(path=unzip_path)
 
-    shared_driver.quit()
 
 
 def log(type, message, GLOBALS):
