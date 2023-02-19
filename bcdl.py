@@ -65,7 +65,7 @@ def set_global_vars():
     GLOBALS['PAGE_LOAD_TIMEOUT'] = 10
 
     # how long to wait for the user to sign in, in seconds
-    GLOBALS['SIGN_IN_WAIT_TIME'] = 15
+    GLOBALS['SIGN_IN_WAIT_TIME'] = 60
 
     # for debug messages & limiting number of albums to load
     GLOBALS['DEBUG'] = False
@@ -88,9 +88,9 @@ def set_global_vars():
     GLOBALS['search'] = None
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--username", dest="username", type=str, required=True,
+    parser.add_argument("--username", dest="username", type=str,
                         help="Username for signing into Bandcamp")
-    parser.add_argument("--password", dest="password", type=str, required=True,
+    parser.add_argument("--password", dest="password", type=str,
                         help="Password for signing into Bandcamp")
     parser.add_argument("--update", dest="update", action="store_true",
                         help="Refresh the database of purchased music")
@@ -112,7 +112,6 @@ def set_global_vars():
 
     args = parser.parse_args()
 
-    # TODO: allow user to sign in on their own rather than via args
     GLOBALS['USER'] = args.username
     GLOBALS['PASS'] = args.password
     update = args.update
@@ -169,10 +168,11 @@ def sign_in(shared_driver, GLOBALS):
         with open('user_pass', 'r') as login:
             GLOBALS['USER'] = login.readline()
             GLOBALS['PASS'] = login.readline()
-    username_field.send_keys(GLOBALS['USER'])
-    password_field.send_keys(GLOBALS['PASS'])
 
-    password_field.send_keys(Keys.RETURN)
+    if (GLOBALS['USER'] is not None) and (GLOBALS['PASS'] is not None):
+        username_field.send_keys(GLOBALS['USER'])
+        password_field.send_keys(GLOBALS['PASS'])
+        password_field.send_keys(Keys.RETURN)
 
     shared_driver.implicitly_wait(10)
 

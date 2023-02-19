@@ -8,15 +8,15 @@ My first project here on github!
 
 Build your local database (assuming that you own 500 or less releases):
 
-`python bcdl.py --user email@here.com --password pass123word --update --max_albums 500`
+`python bcdl.py --username email@here.com --password pass123word --update --max_albums 500`
 
 Search your local database for the word 'haircuts':
 
-`python bcdl.py --user email@here.com --password pass123word --search haircuts`
+`python bcdl.py --username email@here.com --password pass123word --search haircuts`
 
 Or, display your entire local database:
 
-`python bcdl.py --user email@here.com --password pass123word --search`
+`python bcdl.py --username email@here.com --password pass123word --search`
 
 ## What does it do?
 
@@ -40,27 +40,13 @@ Note that selecting an audio format is currently not implemented, and seems to d
 
 First, you'll need to specify a username/password for either database building/updating or for release downloading. Currently, you can either:
 
-`python bcdl.py --user email@here.com --password pass123word`
+`python bcdl.py --username email@here.com --password pass123word`
 
-or, you may create a file named `user_pass` in the same directory, containing the email on the first line, password on the second, and nothing else in the file:
+Or, if you do not provide the `--username` or `--password` flags, you can sign into the selenium window when it pops up. You will have `SIGN_IN_WAIT_TIME` seconds to do so, which is 60 seconds by default, but this can be changed via the argument `--sign_in_wait_time`. For example, the following command allows you 120 seconds to sign in manually:
 
-*./user_pass*
+`python bcdl.py --sign_in_wait_time 120`
 
-first line: `email@here.com`
-
-second line: `pass123word`
-
-Next, you'll need to pass the `--debug` flag, *and* you'll still need to provide a username/password, but they will be ignored by **bcdl**:
-
-`python bcdl.py --debug --user gibberish --password gibberish`
-
-You may also intentionally enter an incorrect username/password, and simply sign in on your own once the selenium window pops up. You will have `SIGN_IN_WAIT_TIME` seconds to do so, which is 15 seconds by default, but this can be changed via the argument `--sign_in_wait_time`. For example, the following command allows you 60 seconds to sign in manually:
-
-`python bcdl.py --user gibberish --password gibberish --sign_in_wait_time 60`
-
-(in the above example, the login will fail, and you'll have 60 seconds to type in your username/password yourself)
-
-Also of note is that, no matter which way you choose to sign in, you may have to solve a captcha. The point of the `SIGN_IN_WAIT_TIME` variable is to allow time to complete the captcha.
+Also of note is that, no matter which way you choose to sign in, you may have to solve a captcha. The point of the `SIGN_IN_WAIT_TIME` variable is to allow enough time to complete the captcha.
 
 ### Database building/updating
 
@@ -70,17 +56,17 @@ Currently, **bcdl** will crash if all you do is attempt to sign in but you don't
 
 Let's say you have a total of 1234 releases in your bandcamp account and you would like to build a local database containing all of these releases. You would use a command similar to this:
 
-`python bcdl.py --user email@here.com --password pass123word --update --max_albums 1300`
+`python bcdl.py --username email@here.com --password pass123word --update --max_albums 1300`
 
 Let's say a month has passed since you've last updated your local database, and you've since purchased a staggering 150 new albums. Rather than scanning your entire bandcamp collection again, a command like this can be utilized instead:
 
-`python bcdl.py --user email@here.com --password pass123word --update --max_albums 200`
+`python bcdl.py --username email@here.com --password pass123word --update --max_albums 200`
 
 ### Searching/downloading
 
 To search the local database of releases, you can use the `--search` flag followed by a keyword or phrase:
 
-`python bcdl.py --user email@here.com --password pass123word --search haircuts`
+`python bcdl.py --username email@here.com --password pass123word --search haircuts`
 
 This search will return all releases where the artist or album name contains the word "haircuts". The results are sorted by popularity, with the most popular release appearing first. Deeper search functionality is planned but not yet implemented.
 
@@ -92,7 +78,7 @@ The script will then navigate to each download page, download each selected rele
 
 If you want to view the entire database, you can run the `--search` flag without a keyword or phrase:
 
-`python bcdl.py --user email@here.com --password pass123word --search`
+`python bcdl.py --username email@here.com --password pass123word --search`
 
 ## Todo
 
