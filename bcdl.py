@@ -25,15 +25,17 @@ import urllib.parse
 def main():
     GLOBALS = set_global_vars()
 
+    shared_db_con = init_db_con(GLOBALS)
+
     if GLOBALS['update']:
         shared_driver = init_driver()
-        total_added_to_db = refresh_db(shared_driver, GLOBALS)
+        total_added_to_db = refresh_db(shared_driver, GLOBALS, shared_db_con)
         if (total_added_to_db == -1):
             print("Unable to update database! Exiting...")
             exit(1)
 
     if (GLOBALS['search'] is not None):
-        download_list = search_db(GLOBALS['search'], GLOBALS)
+        download_list = search_db(GLOBALS['search'], GLOBALS, shared_db_con)
         print("==> Albums to download (eg: 1 2 3, 1-3)")
         user_input = input("==> ").split()
         selected_list = []
@@ -57,6 +59,8 @@ def main():
 
     if (GLOBALS['DEBUG']):
         GLOBALS['DEBUG_FILE'].close()
+
+    close_db(GLOBALS, shared_db_con)
 
 
 def set_global_vars():
@@ -206,14 +210,14 @@ def sign_in(shared_driver, GLOBALS):
     return True
 
 
-def refresh_db(shared_driver, GLOBALS):
+def refresh_db(shared_driver, GLOBALS, shared_db_con):
     '''Will call sign_in() and add any new albums into the database.
     Will stop after MAX_ALBUMS albums. Returns boolean depending on
     success'''
     # (ie: if you only purchased 5 new albums since the last refresh, there's
     # probably no need to go through all 2000 albums owned)
 
-    create_db(GLOBALS)
+    create_db(GLOBALS, shared_db_con)
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
         return -1
@@ -238,10 +242,6 @@ def refresh_db(shared_driver, GLOBALS):
         elif (current_album_count > GLOBALS['MAX_ALBUMS']):
             break
 
-        # TODO: i believe the number of keypresses needed is going to change
-        #       depending on the size of the window; maybe i'll have to whip
-        #       up some sort of equation that takes window height as input
-        #       and spits out the number of keypresses required
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
         actions.send_keys(Keys.PAGE_DOWN)
@@ -272,7 +272,7 @@ def refresh_db(shared_driver, GLOBALS):
 
     return_album_counter = 0
 
-    # NOTE: attempting to parse {len(elements)} releases...
+    # attempt to parse {len(elements)} releases
     for element in elements:
         # scrape whether or not the album is private
         element_text = element.text.split('\n')
@@ -300,31 +300,25 @@ def refresh_db(shared_driver, GLOBALS):
             artist_name = re.findall(grab_priv_artist_regex, element.text)[0]
 
         # regex out popularity & convert to integer
-        # TODO: remove try/except block so we don't have a bare except
-        try:
-            popularity = []
-            popularity = re.findall(grab_popularity_regex, pop_element.text)
-            if len(popularity) > 0:
-                popularity = int(popularity[0])
-            else:
-                popularity = 0
-        except:
+        popularity = []
+        popularity = re.findall(grab_popularity_regex, pop_element.text)
+        if len(popularity) > 0:
+            popularity = int(popularity[0])
+        else:
             popularity = 0
 
         # regex the shortlink out if not private
         # (there is no long link for private releases)
         if (not is_private):
-            # TODO: remove try/except to see if it's even necessary
-            try:
-                bc_short = []
-                bc_short = re.findall(grab_short_page_regex, bc_long)
-                if len(bc_short) > 0:
-                    bc_short = bc_short[0]
-                else:
-                    bc_short = "ERROR"
-            except:
+            bc_short = []
+            bc_short = re.findall(grab_short_page_regex, bc_long)
+            if len(bc_short) > 0:
+                bc_short = bc_short[0]
+            else:
                 bc_short = "ERROR"
-                log("ERROR", "Failed to grab bc_short out of {bc_long}", GLOBALS)
+            #except:
+            #    bc_short = "ERROR"
+            #    log("ERROR", "Failed to grab bc_short out of {bc_long}", GLOBALS)
         else:
             bc_short = bc_long
 
@@ -336,7 +330,8 @@ def refresh_db(shared_driver, GLOBALS):
             # then download_page is converted to a string, containing the link
             download_page = download_page.get_attribute("href")
             if (add_to_db(artist_name, album_name, popularity, is_private,
-                          download_page, bc_long, bc_short, GLOBALS)):
+                          download_page, bc_long, bc_short, GLOBALS,
+                          shared_db_con)):
                 return_album_counter += 1
         else:
             download_page = "ERROR"
@@ -355,12 +350,19 @@ def refresh_db(shared_driver, GLOBALS):
     return return_album_counter
 
 
-def create_db(GLOBALS):
+def init_db_con(GLOBALS):
+    return sqlite3.connect(GLOBALS['DB_LOCATION'])
+
+
+def close_db(GLOBALS, shared_db_con):
+    shared_db_con.close()
+
+
+def create_db(GLOBALS, shared_db_con):
     '''Creates a table named ALBUM with the properties
        artist, album, popularity, is_private, download_page, bc_long, bc_short
        if it does not already exist'''
-    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
-    cur = con.cursor()
+    cur = shared_db_con.cursor()
     res = cur.execute("SELECT name FROM sqlite_master")
     if (not res.fetchone()):
         log("INFO", "making db", GLOBALS)
@@ -370,50 +372,40 @@ def create_db(GLOBALS):
         cur.execute(run_string)
 
 
-def is_dl_page_in_db(download_page, GLOBALS):
+def is_dl_page_in_db(download_page, GLOBALS, shared_db_con):
     '''Returns True if the provided download_page is already in the database,
     otherwise false'''
-    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
-    cur = con.cursor()
+    cur = shared_db_con.cursor()
     res = cur.execute(f"SELECT download_page FROM ALBUM WHERE download_page='{download_page}'")
     if (not res.fetchall()):
         log('INFO', f'{download_page} was not in db, returning False', GLOBALS)
-        con.close()
         return False
     log('INFO', f'{download_page} was in db, returning True', GLOBALS)
-    con.close()
     return True
 
 
 def add_to_db(artist_name, album_name, popularity, is_private, download_page,
-              bc_long, bc_short, GLOBALS):
+              bc_long, bc_short, GLOBALS, shared_db_con):
     '''Adds provided arguments into the database, as long as download_page is
     not already in the database. Returns True on success, False on failure'''
-    # TODO: can bring con and cur outside of the scope of this function &
-    # expose it to the rest of the script, instead of constantly open/close
     # TODO: maybe add some type of option to check if any of this data has
     # been updated (ie: popularity or private settings)
-    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
-    cur = con.cursor()
+    cur = shared_db_con.cursor()
     data = [artist_name, album_name, popularity, is_private, download_page, bc_long, bc_short]
-    if (not is_dl_page_in_db(download_page, GLOBALS)):
+    if (not is_dl_page_in_db(download_page, GLOBALS, shared_db_con)):
         cur.execute("INSERT INTO ALBUM VALUES(?, ?, ?, ?, ?, ?, ?)", data)
-        con.commit()
-        con.close()
+        shared_db_con.commit()
         log('INFO', f'{album_name} added to db', GLOBALS)
         return True
     else:
         log('INFO', f'{album_name} failed to add to db; probably already in there', GLOBALS)
-        con.close()
         return False
     log('ERROR, 'f'something went wrong while adding {album_name}!!!', GLOBALS)
-    con.close()
     return False
 
 
-def search_db(search_string, GLOBALS):
-    con = sqlite3.connect(GLOBALS['DB_LOCATION'])
-    cur = con.cursor()
+def search_db(search_string, GLOBALS, shared_db_con):
+    cur = shared_db_con.cursor()
 
     download_pages = list()
     print_list = list()
@@ -439,7 +431,6 @@ def search_db(search_string, GLOBALS):
     for item in print_list[::-1]:
         print(item)
 
-    con.close()
     return download_pages
 
 
