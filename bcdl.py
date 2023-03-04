@@ -57,9 +57,6 @@ def main():
     if (GLOBALS['update']):
         print(f"A total of {total_added_to_db} albums were added to the database")
 
-    if (GLOBALS['DEBUG']):
-        GLOBALS['DEBUG_FILE'].close()
-
     close_db(GLOBALS, shared_db_con)
 
 
@@ -140,7 +137,7 @@ def set_global_vars():
         GLOBALS['SIGN_IN_WAIT_TIME'] = sign_in_wait_time
     if debug:
         GLOBALS['DEBUG'] = True
-        GLOBALS['DEBUG_FILE'] = open('debug_log', 'a')
+        GLOBALS['DEBUG_FILE'] = 'debug_log'
     if max_albums:
         GLOBALS['MAX_ALBUMS'] = max_albums
     if update:
@@ -282,7 +279,19 @@ def refresh_db(shared_driver, GLOBALS, shared_db_con):
             is_private = 0
 
         title_element = element.find_element(by=By.XPATH, value=title_xpath)
-        pop_element = element.find_element(by=By.XPATH, value=pop_xpath)
+
+        try:
+            pop_element = element.find_element(by=By.XPATH, value=pop_xpath)
+            # regex out popularity & convert to integer
+            popularity = []
+            popularity = re.findall(grab_popularity_regex, pop_element.text)
+            if len(popularity) > 0:
+                popularity = int(popularity[0])
+            else:
+                popularity = 0
+        except NoSuchElementException:
+            popularity = 0
+
         artist_element = element.find_element(by=By.XPATH, value=artist_xpath)
         bc_element = element.find_element(by=By.XPATH, value=bc_xpath)
 
@@ -299,13 +308,6 @@ def refresh_db(shared_driver, GLOBALS, shared_db_con):
             album_name = element.get_attribute("data-title")
             artist_name = re.findall(grab_priv_artist_regex, element.text)[0]
 
-        # regex out popularity & convert to integer
-        popularity = []
-        popularity = re.findall(grab_popularity_regex, pop_element.text)
-        if len(popularity) > 0:
-            popularity = int(popularity[0])
-        else:
-            popularity = 0
 
         # regex the shortlink out if not private
         # (there is no long link for private releases)
@@ -445,6 +447,9 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
 
     download_urls = []
 
+    # TODO: need to add the ability to select audio format
+    # maybe ask after user's selection if --format xxxx was not passed
+    # as an argument
     for download_page in download_pages:
         shared_driver.get(download_page)
         shared_driver.implicitly_wait(5)
@@ -493,13 +498,13 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
                 zip_object.extractall(path=unzip_path)
 
 
-
 def log(type, message, GLOBALS):
     '''Print and record a debug message'''
     message = str(type) + ': ' + str(message)
     if (GLOBALS['DEBUG']):
         print(message)
-        GLOBALS['DEBUG_FILE'].write(message + '\n')
+        with open(GLOBALS['DEBUG_FILE'], "a") as debug_file:
+            debug_file.write(message + '\n')
 
 
 if __name__ == "__main__":
