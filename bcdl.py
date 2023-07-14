@@ -441,8 +441,7 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
         log("ERROR", "failed to sign in!", GLOBALS)
         return False
 
-    dl_url_xpath = "//a[@class='item-button']"
-
+    dl_url_xpath = "//a[@data-bind='attr: { href: downloadUrl }, visible: downloadReady() && !downloadError()']"
     zip_name_regex = r'(?<=filename\*=UTF-8\'\').+?(?=.zip)'
 
     download_urls = []
