@@ -485,11 +485,18 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
             with open(zip_path, 'wb') as zip_file:
                 zip_file.write(response.content)
 
+            # extract artist & name out of zip string
+            zip_name = zip_name[:-4]
+            parts = zip_name.split(" - ")
+            artist = parts[0]
+            # if an zip is named something like 'dsfwan - GEO - C05.zip' then it will
+            # set artist to dsfwan and album will be the rest (GEO - C05)
+            album = " - ".join(parts[1:]) if len(parts) > 1 else parts[1]
+
             with ZipFile(zip_path, 'r') as zip_object:
-                # TODO: need more granular control over unzip directory,
-                # ie: {music_directory}/artist/album rather than just unzipping
-                # it to {music_directory}/Artist - Album
-                unzip_path = os.path.join(music_directory, zip_name[:-4])
+                # build unzip_path
+                unzip_path = os.path.join(music_directory, f'{artist}/{album}')
+                os.makedirs(unzip_path)
                 log("TESTING", f'downloaded {download_url} to {zip_path};'
                                f' attempting to unzip into {unzip_path}',
                                GLOBALS)
