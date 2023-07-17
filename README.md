@@ -30,7 +30,7 @@ After selecting which releases to download, **bcdl** will sign into the user's a
 
 With the songs being unzipped as:
 
-`./downloads/Artist - Album/Artist - Album - ## Song Title.flac`
+`./downloads/Artist/Album/Artist - Album - ## Song Title.flac`
 
 Note that selecting an audio format is currently not implemented, and seems to default to however you normally download albums from bandcamp.
 
@@ -50,7 +50,7 @@ Also of note is that, no matter which way you choose to sign in, you may have to
 
 ### Database building/updating
 
-Currently, **bcdl** will crash if all you do is attempt to sign in but you don't pass any other arguments. You must provide either the `--update` or `--search` flag. We'll talk about `--update` first:
+**bcdl** will exit if all you do is attempt to sign in but you don't pass any other arguments. You must provide either the `--update` or `--search` flag. We'll talk about `--update` first:
 
 `--update` takes no arguments, and all it does is attempt to sign in, and build/update a database up to the first `MAX_ALBUMS` albums. The default value for `MAX_ALBUMS` is 100. The name of this variable is a little misleading; it will actually grab *at least* `MAX_ALBUMS` albums, rather than a *maximum* of `MAX_ALBUMS` albums. The `MAX_ALBUMS` may be changed via the `--max_albums` argument.
 

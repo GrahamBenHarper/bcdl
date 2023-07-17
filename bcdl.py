@@ -145,6 +145,10 @@ def set_global_vars():
     if search is not None:
         GLOBALS['search'] = search
 
+    if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
+        print("Neither --update nor --search passed; exiting")
+        exit()
+
     return GLOBALS
 
 
@@ -458,6 +462,8 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
             download_element = shared_driver.find_element(by=By.XPATH,
                                                           value=dl_url_xpath)
             download_url = download_element.get_attribute("href")
+            # DEBUG:
+            print(f'download_url is {download_url}')
             sleep(1)
 
         download_urls.append(download_url)
