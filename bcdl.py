@@ -52,8 +52,9 @@ def main():
             for i in range(lower_bound, upper_bound + 1):
                 selected_list.append(download_list[i])
 
+        format = select_format()
         shared_driver = init_driver()
-        download_albums(selected_list, './downloads/', './downloads/', 'flac', shared_driver, GLOBALS)
+        download_albums(selected_list, './downloads/', './downloads/', format, shared_driver, GLOBALS)
 
     if (GLOBALS['update']):
         print(f"A total of {total_added_to_db} albums were added to the database")
@@ -411,6 +412,25 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
     return False
 
 
+def select_format():
+    # TODO: should probably allow the user to pass a --format flag rather
+    #       than requiring this
+    # ....also, maybe i should refactor and rename "format" to something else lol
+    formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac', 'wav', 'aiff-lossless']
+    for index, format in enumerate(formats[::-1], start=1):
+        print(f'{index} - {format}')
+    
+    print("==> Audio format to download (eg: 1, 2, ... {})".format(len(formats)))
+    while True:
+        try:
+            user_input = int(input("==> "))
+            if 1 <= user_input <= len(formats):
+                return formats[::-1][user_input-1]
+            else:
+                print("==> Please enter a number between 1 and {}.".format(len(formats)))
+        except ValueError:
+            print("==> Please enter a number between 1 and {}.".format(len(formats)))
+
 def search_db(search_string, GLOBALS, shared_db_con):
     cur = shared_db_con.cursor()
 
@@ -467,7 +487,7 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
                                                           value=dl_url_xpath)
             download_url = download_element.get_attribute("href")
             # DEBUG:
-            print(f'download_url is {download_url}')
+            log('INFO', f'download_url is {download_url}', GLOBALS)
             sleep(1)
 
         download_urls.append(download_url)
