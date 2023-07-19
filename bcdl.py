@@ -3,6 +3,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
+from selenium.webdriver.support.ui import Select
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
 
@@ -450,13 +451,16 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
 
     download_urls = []
 
-    # TODO: need to add the ability to select audio format
+    # TODO: need to add the ability to for the user to choose the audio format
     # maybe ask after user's selection if --format xxxx was not passed
     # as an argument
     for download_page in download_pages:
         shared_driver.get(download_page)
         shared_driver.implicitly_wait(5)
         download_url = None
+
+        format_dropdown = Select(shared_driver.find_element(by=By.ID, value='format-type'))
+        format_dropdown.select_by_value(format)
 
         while (download_url is None):
             download_element = shared_driver.find_element(by=By.XPATH,
