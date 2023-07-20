@@ -52,9 +52,13 @@ def main():
             for i in range(lower_bound, upper_bound + 1):
                 selected_list.append(download_list[i])
 
+        # TODO: this feels like code smell. i think select_format() should
+        #       actually set GLOBALS['format'] instead of just using it to
+        #       change the format variable, since download_variables() requires
+        #       GLOBALS to be passed anyways.
         format = select_format(GLOBALS)
         shared_driver = init_driver()
-        download_albums(selected_list, './downloads/', './downloads/', format, shared_driver, GLOBALS)
+        download_albums(selected_list, './downloads/', format, shared_driver, GLOBALS)
 
     if (GLOBALS['update']):
         print(f"A total of {total_added_to_db} albums were added to the database")
@@ -96,6 +100,9 @@ def set_global_vars():
     # download format
     GLOBALS['format'] = None
 
+    # music directory
+    GLOBALS['directory'] = './downloads/'
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", dest="username", type=str,
                         help="Username for signing into Bandcamp")
@@ -120,6 +127,8 @@ def set_global_vars():
                         help="Maximum number of albums to retrieve")
     parser.add_argument("--format", "-f", dest="format", type=str,
                         help="Format to download albums in")
+    parser.add_argument("--directory", "-d", dest="directory", type=str,
+                        help="Music directory to extract into")
 
     args = parser.parse_args()
 
@@ -134,6 +143,7 @@ def set_global_vars():
     sign_in_wait_time = args.sign_in_wait_time
     max_albums = args.max_albums
     dl_format = args.format
+    x_dir = args.directory
 
     if dry_run:
         GLOBALS['DRY_RUN'] = True
@@ -154,6 +164,8 @@ def set_global_vars():
         GLOBALS['search'] = search
     if dl_format:
         GLOBALS['format'] = dl_format
+    if x_dir:
+        GLOBALS['directory'] = x_dir
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
         print("Neither --update nor --search passed; exiting")
@@ -470,7 +482,7 @@ def search_db(search_string, GLOBALS, shared_db_con):
     return download_pages
 
 
-def download_albums(download_pages, zip_directory, music_directory, format, shared_driver, GLOBALS):
+def download_albums(download_pages, zip_directory, format, shared_driver, GLOBALS):
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
         return False
@@ -531,7 +543,7 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
 
             with ZipFile(zip_path, 'r') as zip_object:
                 # build unzip_path
-                unzip_path = os.path.join(music_directory, f'{artist}/{album}')
+                unzip_path = os.path.join(GLOBALS['directory'], f'{artist}/{album}')
                 # TODO: error handling for FileExistsError
                 os.makedirs(unzip_path)
                 log("TESTING", f'downloaded {download_url} to {zip_path};'
