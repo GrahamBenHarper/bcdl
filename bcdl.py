@@ -104,26 +104,26 @@ def set_global_vars():
     GLOBALS['directory'] = './downloads/'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--username", dest="username", type=str,
+    parser.add_argument("--username", "-u", dest="username", type=str,
                         help="Username for signing into Bandcamp")
-    parser.add_argument("--password", dest="password", type=str,
+    parser.add_argument("--password", "-p", dest="password", type=str,
                         help="Password for signing into Bandcamp")
-    parser.add_argument("--update", dest="update", action="store_true",
+    parser.add_argument("--update", "-U", dest="update", action="store_true",
                         help="Refresh the database of purchased music")
-    parser.add_argument("--search", dest="search", type=str, nargs='?',
+    parser.add_argument("--search", "-s", dest="search", type=str, nargs='?',
                         const='', help="Search for albums in the database")
-    parser.add_argument("--dry_run", dest="dry_run", action="store_true",
+    parser.add_argument("--dry", dest="dry_run", action="store_true",
                         help="Perform a dry run without making any changes")
     parser.add_argument("--db", dest="db", type=str,
                         help="Location of the SQLite database")
-    parser.add_argument("--timeout", dest="timeout", type=int,
+    parser.add_argument("--timeout", "-t", dest="timeout", type=int,
                         help="Timeout between db update checks (see docs)")
     parser.add_argument("--sign_in_wait_time", dest="sign_in_wait_time",
                         type=int,
                         help="Wait time for sign in process in seconds")
     parser.add_argument("--debug", dest="debug", action="store_true",
                         help="Turn on debugging output")
-    parser.add_argument("--max_albums", dest="max_albums", type=int,
+    parser.add_argument("--max_albums", "-m", dest="max_albums", type=int,
                         help="Maximum number of albums to retrieve")
     parser.add_argument("--format", "-f", dest="format", type=str,
                         help="Format to download albums in")
