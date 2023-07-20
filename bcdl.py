@@ -52,7 +52,7 @@ def main():
             for i in range(lower_bound, upper_bound + 1):
                 selected_list.append(download_list[i])
 
-        format = select_format()
+        format = select_format(GLOBALS)
         shared_driver = init_driver()
         download_albums(selected_list, './downloads/', './downloads/', format, shared_driver, GLOBALS)
 
@@ -93,6 +93,9 @@ def set_global_vars():
     GLOBALS['update'] = False
     GLOBALS['search'] = None
 
+    # download format
+    GLOBALS['format'] = None
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", dest="username", type=str,
                         help="Username for signing into Bandcamp")
@@ -115,6 +118,8 @@ def set_global_vars():
                         help="Turn on debugging output")
     parser.add_argument("--max_albums", dest="max_albums", type=int,
                         help="Maximum number of albums to retrieve")
+    parser.add_argument("--format", "-f", dest="format", type=str,
+                        help="Format to download albums in")
 
     args = parser.parse_args()
 
@@ -128,6 +133,7 @@ def set_global_vars():
     debug = args.debug
     sign_in_wait_time = args.sign_in_wait_time
     max_albums = args.max_albums
+    dl_format = args.format
 
     if dry_run:
         GLOBALS['DRY_RUN'] = True
@@ -146,6 +152,8 @@ def set_global_vars():
         GLOBALS['update'] = update
     if search is not None:
         GLOBALS['search'] = search
+    if dl_format:
+        GLOBALS['format'] = dl_format
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
         print("Neither --update nor --search passed; exiting")
@@ -412,10 +420,11 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
     return False
 
 
-def select_format():
-    # TODO: should probably allow the user to pass a --format flag rather
-    #       than requiring this
-    # ....also, maybe i should refactor and rename "format" to something else lol
+def select_format(GLOBALS):
+    # TODO: maybe i should refactor and rename "format" to something else lol
+    if GLOBALS['format'] is not None:
+        return GLOBALS['format']
+
     formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac', 'wav', 'aiff-lossless']
     for index, format in enumerate(formats[::-1], start=1):
         print(f'{index} - {format}')
@@ -471,9 +480,6 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
 
     download_urls = []
 
-    # TODO: need to add the ability to for the user to choose the audio format
-    # maybe ask after user's selection if --format xxxx was not passed
-    # as an argument
     for download_page in download_pages:
         shared_driver.get(download_page)
         shared_driver.implicitly_wait(5)
@@ -526,6 +532,7 @@ def download_albums(download_pages, zip_directory, music_directory, format, shar
             with ZipFile(zip_path, 'r') as zip_object:
                 # build unzip_path
                 unzip_path = os.path.join(music_directory, f'{artist}/{album}')
+                # TODO: error handling for FileExistsError
                 os.makedirs(unzip_path)
                 log("TESTING", f'downloaded {download_url} to {zip_path};'
                                f' attempting to unzip into {unzip_path}',
