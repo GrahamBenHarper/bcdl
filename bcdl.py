@@ -36,7 +36,10 @@ def main():
             exit(1)
 
     if (GLOBALS['search'] is not None):
-        download_list = search_db(GLOBALS['search'], GLOBALS, shared_db_con)
+        if GLOBALS['non-english'] == True:
+            download_list = search_db_non_english(GLOBALS, shared_db_con)
+        else:
+            download_list = search_db(GLOBALS, shared_db_con)
         print("==> Albums to download (eg: 1 2 3, 1-3)")
         user_input = input("==> ").split()
         selected_list = []
@@ -67,6 +70,13 @@ def main():
 
 
 def set_global_vars():
+    # TODO: this whole thing is an obtuse mess and needs to be cleaned up.
+    #       i think i can use const='..' to eliminate the defaults
+    #       and i think it's redundant to create a variable that is just
+    #       a copy of the argument, that will then be moved into its
+    #       real destination (GLOBALS['..']). just seems really unnecessary
+    # ---------------------------------------------------------------------
+
     # default values for global variables & a brief explanation of each
     GLOBALS = {}
 
@@ -96,6 +106,7 @@ def set_global_vars():
     # action to perform on this run, update db or search db? or both
     GLOBALS['update'] = False
     GLOBALS['search'] = None
+    GLOBALS['non-english'] = False
 
     # download format
     GLOBALS['format'] = None
@@ -112,6 +123,8 @@ def set_global_vars():
                         help="Refresh the database of purchased music")
     parser.add_argument("--search", "-s", dest="search", type=str, nargs='?',
                         const='', help="Search for albums in the database")
+    parser.add_argument("--non-english-search", "-n", dest="non_english_search", type=str, nargs='?', const='', 
+                        help="Search for albums in the database that contain non-English characters")
     parser.add_argument("--dry", dest="dry_run", action="store_true",
                         help="Perform a dry run without making any changes")
     parser.add_argument("--db", dest="db", type=str,
@@ -136,6 +149,9 @@ def set_global_vars():
     GLOBALS['PASS'] = args.password
     update = args.update
     search = args.search
+    if search is None:
+        search = args.non_english_search
+        GLOBALS['non-english'] = True
     dry_run = args.dry_run
     db = args.db
     timeout = args.timeout
@@ -452,7 +468,37 @@ def select_format(GLOBALS):
         except ValueError:
             print("==> Please enter a number between 1 and {}.".format(len(formats)))
 
-def search_db(search_string, GLOBALS, shared_db_con):
+def search_db_non_english(GLOBALS, shared_db_con):
+    cur = shared_db_con.cursor()
+
+    download_pages = list()
+    print_list = list()
+    index = 1
+    sqlite_query = '''
+        SELECT artist_name, album_name, popularity, is_private, download_page
+        FROM album
+        WHERE artist_name GLOB ? AND (artist_name LIKE ? OR album_name LIKE ?)
+        ORDER BY popularity DESC
+    '''
+
+    download_pages.append(None)  # fix index
+
+    search_pattern = ('*[^a-zA-Z0-9 ,.!?-]*')
+    search_string = '%' + GLOBALS['search'] + '%'
+    sqlite_result = cur.execute(sqlite_query, (search_pattern, search_string, search_string)).fetchall()
+
+    for (artist_name, album_name, popularity, is_private,
+         download_page) in sqlite_result:
+        download_pages.append(download_page)
+        print_list.append(f'{index} - {artist_name} - {album_name} ({popularity})')
+        index += 1
+
+    for item in print_list[::-1]:
+        print(item)
+
+    return download_pages
+
+def search_db(GLOBALS, shared_db_con):
     cur = shared_db_con.cursor()
 
     download_pages = list()
@@ -467,6 +513,7 @@ def search_db(search_string, GLOBALS, shared_db_con):
 
     download_pages.append(None)  # fix index
 
+    search_string = GLOBALS['search']
     search_iter = ('%' + search_string + '%', '%' + search_string + '%')
     sqlite_result = cur.execute(sqlite_query, search_iter).fetchall()
 
