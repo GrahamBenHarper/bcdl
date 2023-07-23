@@ -85,7 +85,8 @@ def set_global_vars():
     GLOBALS['PAGE_LOAD_TIMEOUT'] = 10
 
     # how long to wait for the user to sign in, in seconds
-    GLOBALS['SIGN_IN_WAIT_TIME'] = 60
+    # TODO: this might be a useless variable/argument at this point
+    GLOBALS['SIGN_IN_WAIT_TIME'] = 300
 
     # for debug messages & limiting number of albums to load
     GLOBALS['DEBUG'] = False
