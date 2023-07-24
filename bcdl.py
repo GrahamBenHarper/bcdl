@@ -55,13 +55,9 @@ def main():
             for i in range(lower_bound, upper_bound + 1):
                 selected_list.append(download_list[i])
 
-        # TODO: this feels like code smell. i think select_format() should
-        #       actually set GLOBALS['format'] instead of just using it to
-        #       change the format variable, since download_variables() requires
-        #       GLOBALS to be passed anyways.
-        format = select_format(GLOBALS)
+        select_format(GLOBALS)
         shared_driver = init_driver()
-        download_albums(selected_list, './downloads/', format, shared_driver, GLOBALS)
+        download_albums(selected_list, './downloads/', shared_driver, GLOBALS)
 
     if (GLOBALS['update']):
         print(f"A total of {total_added_to_db} albums were added to the database")
@@ -70,119 +66,54 @@ def main():
 
 
 def set_global_vars():
-    # TODO: this whole thing is an obtuse mess and needs to be cleaned up.
-    #       i think i can use const='..' to eliminate the defaults
-    #       and i think it's redundant to create a variable that is just
-    #       a copy of the argument, that will then be moved into its
-    #       real destination (GLOBALS['..']). just seems really unnecessary
-    # ---------------------------------------------------------------------
-
-    # default values for global variables & a brief explanation of each
     GLOBALS = {}
 
-    # has it been PAGE_LOAD_TIMEOUT seconds without a change in the page? then
-    # it is loaded.
-    GLOBALS['PAGE_LOAD_TIMEOUT'] = 10
-
-    # how long to wait for the user to sign in, in seconds
-    # TODO: this might be a useless variable/argument at this point
-    GLOBALS['SIGN_IN_WAIT_TIME'] = 300
-
-    # for debug messages & limiting number of albums to load
-    GLOBALS['DEBUG'] = False
-    GLOBALS['MAX_ALBUMS'] = 100
-    # TODO: DEBUG_FILE is an object that shouldn't be inside of the GLOBAL
-    # dictionary. perhaps i could make it a string instead and have the
-    # log() function open the file on each write? something like that
     GLOBALS['DEBUG_FILE'] = None
 
-    GLOBALS['DB_LOCATION'] = "bcdl.db"
-
-    # don't actually save & unzip albums
-    GLOBALS['DRY_RUN'] = False
-
-    GLOBALS['USER'] = None
-    GLOBALS['PASS'] = None
-
-    # action to perform on this run, update db or search db? or both
-    GLOBALS['update'] = False
-    GLOBALS['search'] = None
-    GLOBALS['non-english'] = False
-
-    # download format
-    GLOBALS['format'] = None
-
-    # music directory
-    GLOBALS['directory'] = './downloads/'
-
     parser = argparse.ArgumentParser()
-    parser.add_argument("--username", "-u", dest="username", type=str,
+    parser.add_argument("--username", "-u", dest="username", type=str, default=None,
                         help="Username for signing into Bandcamp")
-    parser.add_argument("--password", "-p", dest="password", type=str,
+    parser.add_argument("--password", "-p", dest="password", type=str, default=None,
                         help="Password for signing into Bandcamp")
-    parser.add_argument("--update", "-U", dest="update", action="store_true",
+    parser.add_argument("--update", "-U", dest="update", action="store_true", default=False,
                         help="Refresh the database of purchased music")
-    parser.add_argument("--search", "-s", dest="search", type=str, nargs='?',
+    parser.add_argument("--search", "-s", dest="search", type=str, nargs='?', default=None,
                         const='', help="Search for albums in the database")
-    parser.add_argument("--non-english-search", "-n", dest="non_english_search", type=str, nargs='?', const='', 
+    parser.add_argument("--non-english-search", "-n", dest="non_english_search", type=str, nargs='?', const='',  default=False,
                         help="Search for albums in the database that contain non-English characters")
-    parser.add_argument("--dry", dest="dry_run", action="store_true",
+    parser.add_argument("--dry", dest="dry_run", action="store_true", default=False,
                         help="Perform a dry run without making any changes")
-    parser.add_argument("--db", dest="db", type=str,
+    parser.add_argument("--db", dest="db", type=str, default="bcdl.db",
                         help="Location of the SQLite database")
-    parser.add_argument("--timeout", "-t", dest="timeout", type=int,
+    parser.add_argument("--timeout", "-t", dest="timeout", type=int, default=10,
                         help="Timeout between db update checks (see docs)")
-    parser.add_argument("--sign_in_wait_time", dest="sign_in_wait_time",
-                        type=int,
-                        help="Wait time for sign in process in seconds")
-    parser.add_argument("--debug", dest="debug", action="store_true",
+    parser.add_argument("--debug", dest="debug", action="store_true", default=False,
                         help="Turn on debugging output")
-    parser.add_argument("--max_albums", "-m", dest="max_albums", type=int,
+    parser.add_argument("--max_albums", "-m", dest="max_albums", type=int, default=100,
                         help="Maximum number of albums to retrieve")
-    parser.add_argument("--format", "-f", dest="format", type=str,
+    parser.add_argument("--format", "-f", dest="format", type=str, default=None,
                         help="Format to download albums in")
-    parser.add_argument("--directory", "-d", dest="directory", type=str,
+    parser.add_argument("--directory", "-d", dest="directory", type=str, default="./downloads/",
                         help="Music directory to extract into")
 
     args = parser.parse_args()
 
     GLOBALS['USER'] = args.username
     GLOBALS['PASS'] = args.password
-    update = args.update
-    search = args.search
-    if search is None:
-        search = args.non_english_search
+    GLOBALS['update'] = args.update
+    GLOBALS['search'] = args.search
+    GLOBALS['non-english'] = args.non_english_search
+    if GLOBALS['search'] is None:
+        GLOBALS['search'] = args.non_english_search
         GLOBALS['non-english'] = True
-    dry_run = args.dry_run
-    db = args.db
-    timeout = args.timeout
-    debug = args.debug
-    sign_in_wait_time = args.sign_in_wait_time
-    max_albums = args.max_albums
-    dl_format = args.format
-    x_dir = args.directory
+    GLOBALS['DRY_RUN'] = args.dry_run
+    GLOBALS['DB_LOCATION'] = args.db
+    GLOBALS['PAGE_LOAD_TIMEOUT'] = args.timeout
+    GLOBALS['DEBUG'] = args.debug
 
-    if dry_run:
-        GLOBALS['DRY_RUN'] = True
-    if db:
-        GLOBALS['DB_LOCATION'] = db
-    if timeout:
-        GLOBALS['PAGE_LOAD_TIMEOUT'] = timeout
-    if sign_in_wait_time:
-        GLOBALS['SIGN_IN_WAIT_TIME'] = sign_in_wait_time
-    if debug:
-        GLOBALS['DEBUG'] = True
-        GLOBALS['DEBUG_FILE'] = 'debug_log'
-    if max_albums:
-        GLOBALS['MAX_ALBUMS'] = max_albums
-    if update:
-        GLOBALS['update'] = update
-    if search is not None:
-        GLOBALS['search'] = search
-    if dl_format:
-        GLOBALS['format'] = dl_format
-    if x_dir:
-        GLOBALS['directory'] = x_dir
+    GLOBALS['MAX_ALBUMS'] = args.max_albums
+    GLOBALS['format'] = args.format
+    GLOBALS['directory'] = args.directory
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
         print("Neither --update nor --search passed; exiting")
@@ -236,10 +167,10 @@ def sign_in(shared_driver, GLOBALS):
             show_more_button.click()
             show_more_button.click()
         except NoSuchElementException:
-            if (time_waited >= GLOBALS['SIGN_IN_WAIT_TIME']):
+            if (time_waited >= 300):
                 return False
             log("INFO", f"No luck, have waited {time_waited} seconds; waiting "
-                f"another 5 seconds (max wait {GLOBALS['SIGN_IN_WAIT_TIME']})",
+                "another 5 seconds (max wait 300)",
                 GLOBALS)
             time_waited += 5
             sleep(5)
@@ -450,24 +381,25 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
 
 
 def select_format(GLOBALS):
-    # TODO: maybe i should refactor and rename "format" to something else lol
-    if GLOBALS['format'] is not None:
-        return GLOBALS['format']
-
     formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac', 'wav', 'aiff-lossless']
+    if GLOBALS['format'] in formats:
+        return
+
     for index, format in enumerate(formats[::-1], start=1):
-        print(f'{index} - {format}')
+        print(f"{index} - {format}")
     
     print("==> Audio format to download (eg: 1, 2, ... {})".format(len(formats)))
     while True:
         try:
             user_input = int(input("==> "))
             if 1 <= user_input <= len(formats):
-                return formats[::-1][user_input-1]
+                GLOBALS['format'] = formats[::-1][user_input - 1]
+                return
             else:
                 print("==> Please enter a number between 1 and {}.".format(len(formats)))
         except ValueError:
             print("==> Please enter a number between 1 and {}.".format(len(formats)))
+
 
 def search_db_non_english(GLOBALS, shared_db_con):
     cur = shared_db_con.cursor()
@@ -498,6 +430,7 @@ def search_db_non_english(GLOBALS, shared_db_con):
         print(item)
 
     return download_pages
+
 
 def search_db(GLOBALS, shared_db_con):
     cur = shared_db_con.cursor()
@@ -530,7 +463,7 @@ def search_db(GLOBALS, shared_db_con):
     return download_pages
 
 
-def download_albums(download_pages, zip_directory, format, shared_driver, GLOBALS):
+def download_albums(download_pages, zip_directory, shared_driver, GLOBALS):
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
         return False
@@ -546,7 +479,7 @@ def download_albums(download_pages, zip_directory, format, shared_driver, GLOBAL
         download_url = None
 
         format_dropdown = Select(shared_driver.find_element(by=By.ID, value='format-type'))
-        format_dropdown.select_by_value(format)
+        format_dropdown.select_by_value(GLOBALS['format'])
 
         while (download_url is None):
             download_element = shared_driver.find_element(by=By.XPATH,
