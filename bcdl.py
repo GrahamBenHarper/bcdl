@@ -466,6 +466,10 @@ def search_db(GLOBALS, shared_db_con):
 
 
 def download_albums(download_pages, zip_directory, shared_driver, GLOBALS):
+    '''Will accept a list of bandcamp download pages, iterate through them using
+    the shared_driver, downloading them into the provided zip_directory and
+    unzipping them into GLOBALS['directory']'''
+    # TODO: zip_directory needs to be added as an argument and passed through GLOBALS
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
         return False
