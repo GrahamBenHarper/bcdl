@@ -381,6 +381,8 @@ def add_to_db(artist_name, album_name, popularity, is_private, download_page,
 
 
 def select_format(GLOBALS):
+    '''Will verify if the current value of GLOBALS['format'] is a valid selection
+    and, if not, will prompt the user for a valid selection.'''
     formats = ['mp3-v0', 'mp3-320', 'flac', 'aac-hi', 'vorbis', 'alac', 'wav', 'aiff-lossless']
     if GLOBALS['format'] in formats:
         return
