@@ -40,6 +40,7 @@ Or, display your entire local database organized by popularity:
 * `--username 'USERNAME' --password 'PASSWORD'` (or `-u` and `-p`) can be used to pass your username/password, so you don't need to sign in manually. In other words, the script will type your username/password for you, but you'll still need to do any captchas that show up.
 * `--format 'FORMAT'` (`-f 'FORMAT'`) can be used to specify the desired download format. You must write your selected format as follows (pick one): `'mp3-v0'`, `'mp3-320'`, `'flac'`, `'aac-hi'`, `'vorbis'`, `'alac'`, `'wav'`, `'aiff-lossless'`. If this is not supplied, **bcdl** will simply prompt to select a format while running.
 * `--directory 'DIRECTORY'` (`-d 'DIRECTORY'`) can be used to change the directory that music is *unzipped* and organized into. The default behavior is to organize into `./downloads/Artist/Album/`, alongside the .zip archives, which may be ideal for picard users. However, if you store your music in `/mnt/media/Music`, for example, you could pass `-d '/mnt/media/Music'`
+* `--dl-directory 'DIRECTORY'` (or `-dl 'DIRECTORY'`) can be used to specify where you'd like the .zip file(s) to download.
 
 ## Misc. notes
 * "popularity" (the number next to each release) is bandcamp's reported number for how many users own that release, and is currently the only way that release searches are organized. Future updates may be able to update each release's "popularity" without rebuilding the database from scratch, or allow you to organize search results using different critera.

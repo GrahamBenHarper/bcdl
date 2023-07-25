@@ -57,7 +57,7 @@ def main():
 
         select_format(GLOBALS)
         shared_driver = init_driver()
-        download_albums(selected_list, './downloads/', shared_driver, GLOBALS)
+        download_albums(selected_list, shared_driver, GLOBALS)
 
     if (GLOBALS['update']):
         print(f"A total of {total_added_to_db} albums were added to the database")
@@ -70,6 +70,7 @@ def set_global_vars():
 
     GLOBALS['DEBUG_FILE'] = None
 
+    # TODO: argument to delete .zip file after extracting
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", "-u", dest="username", type=str, default=None,
                         help="Username for signing into Bandcamp")
@@ -93,6 +94,8 @@ def set_global_vars():
                         help="Maximum number of albums to retrieve")
     parser.add_argument("--format", "-f", dest="format", type=str, default=None,
                         help="Format to download albums in")
+    parser.add_argument("--dl-directory", "-dl", dest="dl_directory", type=str, default="./downloads/",
+                        help="Directory to place downloaded zip files")
     parser.add_argument("--directory", "-d", dest="directory", type=str, default="./downloads/",
                         help="Music directory to extract into")
 
@@ -114,6 +117,7 @@ def set_global_vars():
     GLOBALS['MAX_ALBUMS'] = args.max_albums
     GLOBALS['format'] = args.format
     GLOBALS['directory'] = args.directory
+    GLOBALS['dl_directory'] = args.dl_directory
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
         print("Neither --update nor --search passed; exiting")
@@ -465,11 +469,10 @@ def search_db(GLOBALS, shared_db_con):
     return download_pages
 
 
-def download_albums(download_pages, zip_directory, shared_driver, GLOBALS):
+def download_albums(download_pages, shared_driver, GLOBALS):
     '''Will accept a list of bandcamp download pages, iterate through them using
     the shared_driver, downloading them into the provided zip_directory and
     unzipping them into GLOBALS['directory']'''
-    # TODO: zip_directory needs to be added as an argument and passed through GLOBALS
     if (not sign_in(shared_driver, GLOBALS)):
         log("ERROR", "failed to sign in!", GLOBALS)
         return False
@@ -510,12 +513,12 @@ def download_albums(download_pages, zip_directory, shared_driver, GLOBALS):
             zip_name = re.findall(zip_name_regex, zip_name_pre_regex)[0]
             zip_name = urllib.parse.unquote(zip_name)
             zip_name += '.zip'
-            zip_path = os.path.join(zip_directory, zip_name)
+            zip_path = os.path.join(GLOBALS['dl_directory'], zip_name)
 
             print(f'Downloaded {zip_name}; unzipping...')
 
-            if not os.path.exists(zip_directory):
-                os.makedirs(zip_directory)
+            if not os.path.exists(GLOBALS['dl_directory']):
+                os.makedirs(GLOBALS['dl_directory'])
 
             with open(zip_path, 'wb') as zip_file:
                 zip_file.write(response.content)
