@@ -70,7 +70,6 @@ def set_global_vars():
 
     GLOBALS['DEBUG_FILE'] = None
 
-    # TODO: argument to delete .zip file after extracting
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", "-u", dest="username", type=str, default=None,
                         help="Username for signing into Bandcamp")
@@ -98,6 +97,8 @@ def set_global_vars():
                         help="Directory to place downloaded zip files")
     parser.add_argument("--directory", "-d", dest="directory", type=str, default="./downloads/",
                         help="Music directory to extract into")
+    parser.add_argument("--keep", "-k", dest="keep", action="store_true", default=False,
+                        help="Keep downloaded zip archives.")
 
     args = parser.parse_args()
 
@@ -112,6 +113,7 @@ def set_global_vars():
     GLOBALS['DRY_RUN'] = args.dry_run
     GLOBALS['DB_LOCATION'] = args.db
     GLOBALS['PAGE_LOAD_TIMEOUT'] = args.timeout
+    GLOBALS['keep_zip'] = args.keep
     GLOBALS['DEBUG'] = args.debug
 
     GLOBALS['MAX_ALBUMS'] = args.max_albums
@@ -541,6 +543,9 @@ def download_albums(download_pages, shared_driver, GLOBALS):
                                GLOBALS)
 
                 zip_object.extractall(path=unzip_path)
+
+            if GLOBALS['keep_zip'] is False:
+                os.remove(zip_path)
 
 
 def log(type, message, GLOBALS):

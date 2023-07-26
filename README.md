@@ -41,9 +41,10 @@ Or, display your entire local database organized by popularity:
 * `--format 'FORMAT'` (`-f 'FORMAT'`) can be used to specify the desired download format. You must write your selected format as follows (pick one): `'mp3-v0'`, `'mp3-320'`, `'flac'`, `'aac-hi'`, `'vorbis'`, `'alac'`, `'wav'`, `'aiff-lossless'`. If this is not supplied, **bcdl** will simply prompt to select a format while running.
 * `--directory 'DIRECTORY'` (`-d 'DIRECTORY'`) can be used to change the directory that music is *unzipped* and organized into. The default behavior is to organize into `./downloads/Artist/Album/`, alongside the .zip archives, which may be ideal for picard users. However, if you store your music in `/mnt/media/Music`, for example, you could pass `-d '/mnt/media/Music'`
 * `--dl-directory 'DIRECTORY'` (or `-dl 'DIRECTORY'`) can be used to specify where you'd like the .zip file(s) to download.
+* `--keep` or `-k` to keep the downloaded zip archive after extracting it.
 
 ## Misc. notes
-* "popularity" (the number next to each release) is bandcamp's reported number for how many users own that release, and is currently the only way that release searches are organized. Future updates may be able to update each release's "popularity" without rebuilding the database from scratch, or allow you to organize search results using different critera.
+* "popularity" (the number next to each release) is bandcamp's reported number for how many users own that release, and is currently the only way that release searches are sorted. Future updates may be able to update each release's "popularity" without rebuilding the database from scratch, or allow you to organize search results using different critera.
 * When selecting a release to download, you can specify a range of releases or individual releases to download. For example, to download releases 1, 2, 3, 4, 10, 15, 16, and 17, you can type: `1-4 10 15-17` -- just like pacman!
 * A keen eye may notice that the sqlite3 database actually stores a lot more data than is currently displayed, such as if a release is marked as  private, or a fan club only release; future updates will make use of this data.
 
