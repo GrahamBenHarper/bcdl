@@ -18,6 +18,7 @@ import sqlite3
 # downloading & file handling
 import requests
 from zipfile import ZipFile
+from pathlib import Path
 import os
 
 # argument & string parsing
@@ -70,6 +71,25 @@ def main():
 def set_global_vars():
     GLOBALS = {}
 
+    # Check if we're on a POSIX compliant system
+    if os.name == 'posix':
+        data_home = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share'))
+    else:  # We're on a non-POSIX system like Windows
+        data_home = Path.home() / 'AppData' / 'Local'
+
+    database_dir = data_home / 'bcdl'
+    downloads_dir = database_dir / 'downloads'
+
+    # Create the directories if they do not exist
+    database_dir.mkdir(parents=True, exist_ok=True)
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    # The database file path
+    database_file = database_dir / 'bcdl.db'
+
+    # The downloads directory path
+    downloads_path = downloads_dir
+
     GLOBALS['DEBUG_FILE'] = None
 
     parser = argparse.ArgumentParser()
@@ -85,7 +105,7 @@ def set_global_vars():
                         help="Search for albums in the database that contain non-English characters")
     parser.add_argument("--dry", dest="dry_run", action="store_true", default=False,
                         help="Perform a dry run without making any changes")
-    parser.add_argument("--db", dest="db", type=str, default="bcdl.db",
+    parser.add_argument("--db", dest="db", type=str, default=database_file,
                         help="Location of the SQLite database")
     parser.add_argument("--timeout", "-t", dest="timeout", type=int, default=10,
                         help="Timeout between db update checks (see docs)")
@@ -95,9 +115,9 @@ def set_global_vars():
                         help="Maximum number of albums to retrieve")
     parser.add_argument("--format", "-f", dest="format", type=str, default=None,
                         help="Format to download albums in")
-    parser.add_argument("--dl-directory", "-dl", dest="dl_directory", type=str, default="./downloads/",
+    parser.add_argument("--dl-directory", "-dl", dest="dl_directory", type=str, default=downloads_path,
                         help="Directory to place downloaded zip files")
-    parser.add_argument("--directory", "-d", dest="directory", type=str, default="./downloads/",
+    parser.add_argument("--directory", "-d", dest="directory", type=str, default=downloads_path,
                         help="Music directory to extract into")
     parser.add_argument("--keep", "-k", dest="keep", action="store_true", default=False,
                         help="Keep downloaded zip archives.")
@@ -110,8 +130,9 @@ def set_global_vars():
     GLOBALS['search'] = args.search
     GLOBALS['non-english'] = args.non_english_search
     if GLOBALS['search'] is None:
-        GLOBALS['search'] = args.non_english_search
-        GLOBALS['non-english'] = True
+        if args.non_english_search is not False:
+            GLOBALS['search'] = args.non_english_search
+            GLOBALS['non-english'] = True
     GLOBALS['DRY_RUN'] = args.dry_run
     GLOBALS['DB_LOCATION'] = args.db
     GLOBALS['PAGE_LOAD_TIMEOUT'] = args.timeout
@@ -124,7 +145,7 @@ def set_global_vars():
     GLOBALS['dl_directory'] = args.dl_directory
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
-        print("Neither --update nor --search passed; exiting")
+        print("--update, --search, or --non-english-search required; exiting")
         exit()
 
     return GLOBALS
