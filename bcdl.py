@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -395,7 +397,7 @@ def select_format(GLOBALS):
 
     for index, format in enumerate(formats[::-1], start=1):
         print(f"{index} - {format}")
-    
+
     print("==> Audio format to download (eg: 1, 2, ... {})".format(len(formats)))
     while True:
         try:
