@@ -49,4 +49,10 @@ Or, display your entire local database organized by popularity:
 * A keen eye may notice that the sqlite3 database actually stores a lot more data than is currently displayed, such as if a release is marked as  private, or a fan club only release; future updates will make use of this data.
 
 ## License
-I know, I'm sorry I haven't selected one yet; I will take some time to look them over and select one shortly!
+This project is licensed under the GNU General Public License v3.0 (GPLv3) - see the LICENSE file for details.
+
+Under the GPLv3, you are free to use, modify, and distribute this software, under certain conditions. If you modify and distribute this software, you must disclose the source and license your modifications under the GPLv3 as well.
+
+The full terms and conditions of this license are available in the LICENSE file.
+
+Please note that this software comes with no warranty.
