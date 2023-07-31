@@ -7,11 +7,17 @@ Do you have a large bandcamp collection and would prefer to download your releas
 **bcdl** is a project that automates the process of downloading, unzipping, and organizing albums from bandcamp. **bcdl** utilizes selenium to sign into a user's account, create or update a local sqlite3 database of their owned albums, and allows the user to search this database and download one or several albums in the format of their choosing.
 
 ## Installation
+Available on the Arch AUR: `yay bcdl-git`
+
+Otherwise:
+
 ```
 git clone https://github.com/corbin-ch/bcdl.git
 cd bcdl
 pip install -r requirements.txt
 ```
+
+The script seems to run okay on Windows 10 but more testing is needed.
 
 ## Quick start
 
