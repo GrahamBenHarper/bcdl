@@ -32,7 +32,7 @@ def main():
     shared_db_con = init_db_con(GLOBALS)
 
     if GLOBALS['update']:
-        shared_driver = init_driver()
+        shared_driver = init_driver(GLOBALS)
         total_added_to_db = refresh_db(shared_driver, GLOBALS, shared_db_con)
         if (total_added_to_db == -1):
             print("Unable to update database! Exiting...")
@@ -59,7 +59,7 @@ def main():
                 selected_list.append(download_list[i])
 
         select_format(GLOBALS)
-        shared_driver = init_driver()
+        shared_driver = init_driver(GLOBALS)
         download_albums(selected_list, shared_driver, GLOBALS)
 
     if (GLOBALS['update']):
@@ -119,6 +119,8 @@ def set_global_vars():
                         help="Directory to place downloaded zip files")
     parser.add_argument("--directory", "-d", dest="directory", type=str, default=downloads_path,
                         help="Music directory to extract into")
+    parser.add_argument("--geckodriver-executable", "-g", dest="geckodriver_executable", type=str, default=None,
+                        help="Location for geckodriver binary if Selenium reports 'binary is not a firefox executable'")
     parser.add_argument("--keep", "-k", dest="keep", action="store_true", default=False,
                         help="Keep downloaded zip archives.")
 
@@ -143,6 +145,7 @@ def set_global_vars():
     GLOBALS['format'] = args.format
     GLOBALS['directory'] = args.directory
     GLOBALS['dl_directory'] = args.dl_directory
+    GLOBALS['geckodriver_executable'] = args.geckodriver_executable
 
     if (GLOBALS['update'] == False) and GLOBALS['search'] == None:
         print("--update, --search, or --non-english-search required; exiting")
@@ -151,8 +154,12 @@ def set_global_vars():
     return GLOBALS
 
 
-def init_driver():
-    shared_driver = webdriver.Firefox()
+def init_driver(GLOBALS):
+    if GLOBALS['geckodriver_executable'] == None:
+        shared_driver = webdriver.Firefox()
+    else:
+        driver_service = webdriver.FirefoxService(executable_path=GLOBALS['geckodriver_executable'])
+        shared_driver = webdriver.Firefox(service=driver_service)
     return shared_driver
 
 
