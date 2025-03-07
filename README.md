@@ -47,6 +47,7 @@ Or, display your entire local database organized by popularity:
 * `--format 'FORMAT'` (`-f 'FORMAT'`) can be used to specify the desired download format. You must write your selected format as follows (pick one): `'mp3-v0'`, `'mp3-320'`, `'flac'`, `'aac-hi'`, `'vorbis'`, `'alac'`, `'wav'`, `'aiff-lossless'`. If this is not supplied, **bcdl** will simply prompt to select a format while running.
 * `--directory 'DIRECTORY'` (`-d 'DIRECTORY'`) can be used to change the directory that music is *unzipped* and organized into. The default behavior is to organize into `./downloads/Artist/Album/`, alongside the .zip archives, which may be ideal for picard users. However, if you store your music in `/mnt/media/Music`, for example, you could pass `-d '/mnt/media/Music'`
 * `--dl-directory 'DIRECTORY'` (or `-dl 'DIRECTORY'`) can be used to specify where you'd like the .zip file(s) to download.
+* `--geckodriver-executable 'PATH/TO/EXECUTABLE'` (or `-g 'PATH/TO/EXECUTABLE'`) can be used to specify a geckodriver path if Selenium reports system problems such as 'binary is not a Firefox executable'. On most systems this is not required, but some operating systems such as newer versions of Ubuntu require the path `/snap/bin/geckodriver`.
 * `--keep` or `-k` to keep the downloaded zip archive after extracting it.
 
 ## Misc. notes
