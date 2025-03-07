@@ -155,7 +155,6 @@ def init_driver():
     shared_driver = webdriver.Firefox()
     return shared_driver
 
-
 def sign_in(shared_driver, GLOBALS):
     '''Will attempt to sign the user into their bandcamp account, load up
     their collection, and click 'show more.' If sign_in() returns True, that
@@ -503,7 +502,8 @@ def download_albums(download_pages, shared_driver, GLOBALS):
         return False
 
     dl_url_xpath = "//a[@data-bind='attr: { href: downloadUrl }, visible: downloadReady() && !downloadError()']"
-    zip_name_regex = r'(?<=filename\*=UTF-8\'\').+?(?=.zip)'
+    filename_pattern = r"filename\*=UTF-8''([^;\r\n]+)"
+
 
     download_urls = []
 
@@ -531,44 +531,62 @@ def download_albums(download_pages, shared_driver, GLOBALS):
     for download_url in download_urls:
         download_counter += 1
         print(f'Downloading #{download_counter} of {len(download_urls)}...')
-        if (not GLOBALS['DRY_RUN']):
+        if not GLOBALS['DRY_RUN']:
             response = requests.get(download_url)
+            cd_header = response.headers.get("Content-Disposition", "")
+            match = re.search(filename_pattern, cd_header)
+            if match:
+                # Get filename from header (decode URL-encoding)
+                full_name = urllib.parse.unquote(match.group(1))
+            else:
+                # Fallback if we can't match the pattern
+                print("No filename found in Content-Disposition")
+                continue
 
-            zip_name_pre_regex = response.headers.get("Content-Disposition")
-            zip_name = re.findall(zip_name_regex, zip_name_pre_regex)[0]
-            zip_name = urllib.parse.unquote(zip_name)
-            zip_name += '.zip'
-            zip_path = os.path.join(GLOBALS['dl_directory'], zip_name)
+            # Split off the extension
+            base_name, ext = os.path.splitext(full_name)
+            ext = ext.lower()  # to handle .ZIP vs .zip vs .Mp3, etc
 
-            print(f'Downloaded {zip_name}; unzipping...')
-
+            # Create directory if needed
             if not os.path.exists(GLOBALS['dl_directory']):
                 os.makedirs(GLOBALS['dl_directory'])
 
-            with open(zip_path, 'wb') as zip_file:
-                zip_file.write(response.content)
+            # Build path to write the file
+            file_path = os.path.join(GLOBALS['dl_directory'], full_name)
+            print(f"Downloaded {full_name}")
 
-            # extract artist & name out of zip string
-            zip_name = zip_name[:-4]
-            parts = zip_name.split(" - ")
+            # Write file
+            with open(file_path, 'wb') as out_file:
+                out_file.write(response.content)
+
+            # Parse out artist/album (or artist/track)
+            parts = base_name.split(" - ")
             artist = parts[0]
-            # if an zip is named something like 'dsfwan - GEO - C05.zip' then it will
-            # set artist to dsfwan and album will be the rest (GEO - C05)
-            album = " - ".join(parts[1:]) if len(parts) > 1 else parts[1]
+            album_or_track = " - ".join(parts[1:]) if len(parts) > 1 else parts[0]
+            destination_dir = os.path.join(GLOBALS['directory'], artist, album_or_track)
 
-            with ZipFile(zip_path, 'r') as zip_object:
-                # build unzip_path
-                unzip_path = os.path.join(GLOBALS['directory'], f'{artist}/{album}')
-                # TODO: error handling for FileExistsError
-                os.makedirs(unzip_path)
-                log("TESTING", f'downloaded {download_url} to {zip_path};'
-                               f' attempting to unzip into {unzip_path}',
-                               GLOBALS)
+            # If it's a ZIP, unzip it into the artist/album folder
+            if ext == '.zip':
+                if not os.path.exists(destination_dir):
+                    os.makedirs(destination_dir)
+                else:
+                    log("ERROR", f"{destination_dir} already exists; skipping", GLOBALS)
 
-                zip_object.extractall(path=unzip_path)
+                log("TESTING", f"Unzipping {file_path} to {destination_dir}", GLOBALS)
+                with ZipFile(file_path, 'r') as zf:
+                    zf.extractall(path=destination_dir)
 
-            if GLOBALS['keep_zip'] is False:
-                os.remove(zip_path)
+                if not GLOBALS['keep_zip']:
+                    os.remove(file_path)
+
+            else:
+                # For audio (or any other file), just move it to artist/album
+                if not os.path.exists(destination_dir):
+                    os.makedirs(destination_dir)
+                final_path = os.path.join(destination_dir, full_name)
+                os.replace(file_path, final_path)
+
+            print(f"Handled {full_name} successfully.")
 
 
 def log(type, message, GLOBALS):
